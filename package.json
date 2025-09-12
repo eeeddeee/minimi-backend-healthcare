@@ -1,0 +1,48 @@
+{
+  "name": "minimi-backend",
+  "version": "1.0.0",
+  "description": "",
+  "license": "ISC",
+  "author": "Zain Gillani",
+  "type": "module",
+  "main": "server.js",
+  "scripts": {
+    "test": "jest",
+    "seed": "node seed.js",
+    "start": "nodemon server.js"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@aws-sdk/client-s3": "^3.864.0",
+    "@aws-sdk/s3-request-presigner": "^3.864.0",
+    "bcrypt": "^6.0.0",
+    "body-parser": "^2.2.0",
+    "cors": "^2.8.5",
+    "dotenv": "^16.5.0",
+    "eslint": "^8.57.1",
+    "express": "^5.1.0",
+    "express-rate-limit": "^8.0.1",
+    "express-session": "^1.18.1",
+    "helmet": "^8.1.0",
+    "http-status": "^2.1.0",
+    "http-status-codes": "^2.3.0",
+    "joi": "^17.13.3",
+    "jsonwebtoken": "^9.0.2",
+    "mongoose": "^8.15.1",
+    "mongoose-encryption": "^2.1.2",
+    "multer": "^2.0.0",
+    "nodemailer": "^7.0.3",
+    "pdfkit": "^0.17.1",
+    "prettier": "^3.5.3",
+    "prettier-eslint": "^16.4.2",
+    "socket.io": "^4.8.1",
+    "uuid": "^11.1.0",
+    "validator": "^13.15.15"
+  },
+  "devDependencies": {
+    "jest": "^29.7.0",
+    "node-mocks-http": "^1.17.2",
+    "nodemon": "^3.1.10",
+    "supertest": "^7.1.1"
+  }
+}
