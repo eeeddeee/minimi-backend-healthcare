@@ -95,4 +95,11 @@ router.patch(
   medicationController.updateReminderLog
 );
 
+router.post(
+  "/latest-reminders",
+  authenticate,
+  authorize(CAN_MANAGE),
+  medicationController.getNurseLatestReminders
+);
+
 export default router;

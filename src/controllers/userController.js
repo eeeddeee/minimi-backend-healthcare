@@ -471,12 +471,13 @@ export const getUserStatsByRole = async (req, res) => {
 
 export const getUserStatsForAdmin = async (req, res) => {
   try {
-    // Call service to get user stats for all roles
-    const result = await userService.getUserStatsForAdmin();
+    const { startDate, endDate } = req.query;
+
+    const result = await userService.getUserStatsForAdmin(startDate, endDate);
 
     return res.success(
       "User stats fetched successfully.",
-      result, // This will contain the total users for each role
+      result,
       StatusCodes.OK
     );
   } catch (error) {
@@ -488,6 +489,7 @@ export const getUserStatsForAdmin = async (req, res) => {
       });
   }
 };
+
 
 
 export const getHospitalStatsByDate = async (req, res) => {
@@ -508,5 +510,148 @@ export const getHospitalStatsByDate = async (req, res) => {
         success: false,
         message: error.message
       });
+  }
+};
+
+export const getNurseStats = async (req, res) => {
+  try {
+    const nurseId = req.user.id;
+    const { startDate, endDate } = req.query;
+
+    const result = await userService.getNurseStats(nurseId, startDate, endDate);
+
+    return res.success(
+      "Nurse stats fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({
+        success: false,
+        message: error.message,
+      });
+  }
+};
+
+export const getHospitalStats = async (req, res) => {
+  try {
+    const hospitalId = req.user.id;
+    console.log("Hospital ID from req.user:", hospitalId);
+
+    const { startDate, endDate } = req.query;
+
+    const result = await userService.getHospitalStats(
+      hospitalId,
+      startDate,
+      endDate
+    );
+
+    return res.success(
+      "Hospital stats fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({
+        success: false,
+        message: error.message
+      });
+  }
+};
+
+const extractFilters = (req) => {
+  const { page = 1, limit = 10, search, isActive, hospitalId } = req.query;
+  // console.log("Hospital ID from query:", hospitalId);
+  const filters = { search, isActive };
+  return {
+    filters,
+    page: parseInt(page),
+    limit: parseInt(limit),
+    hospitalId,
+  };
+};
+
+export const getNurses = async (req, res) => {
+  try {
+    const { filters, page, limit, hospitalId } = extractFilters(req);
+    const result = await userService.getNurses(
+      filters,
+      page,
+      limit,
+      hospitalId
+    );
+    // console.log(result,"Zainnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnnn");
+    return res.success("Nurses fetched successfully.", result, StatusCodes.OK);
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const getCaregivers = async (req, res) => {
+  try {
+    const { filters, page, limit, hospitalId } = extractFilters(req);
+    const result = await userService.getCaregivers(
+      filters,
+      page,
+      limit,
+      hospitalId
+    );
+    return res.success(
+      "Caregivers fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const getFamilies = async (req, res) => {
+  try {
+    const { filters, page, limit, hospitalId } = extractFilters(req);
+    const result = await userService.getFamilies(
+      filters,
+      page,
+      limit,
+      hospitalId
+    );
+    return res.success(
+      "Families fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const getPatients = async (req, res) => {
+  try {
+    const { filters, page, limit, hospitalId } = extractFilters(req);
+    const result = await userService.getPatients(
+      filters,
+      page,
+      limit,
+      hospitalId
+    );
+    return res.success(
+      "Patients fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
   }
 };

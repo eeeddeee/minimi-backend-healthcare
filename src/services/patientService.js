@@ -66,18 +66,29 @@ export const getAndVerifyPatientByHospital = async (
   return patient;
 };
 
-export const getPatients = async (query = {}, page = 1, limit = 10) => {
+export const getPatients = async (
+  query = {},
+  page = 1,
+  limit = 10,
+  hospitalId
+) => {
   try {
     const skip = (page - 1) * limit;
 
+    const preMatchStage = {};
+    if (hospitalId) {
+      const hospObjId = mongoose.Types.ObjectId.isValid(hospitalId)
+        ? new mongoose.Types.ObjectId(hospitalId)
+        : hospitalId;
+      preMatchStage.hospitalId = hospObjId;
+    }
+
     const matchStage = {};
 
-    // Filter by isActive inside patientUser
     if (query.isActive !== undefined) {
       matchStage["patientUser.isActive"] = query.isActive === "true";
     }
 
-    // Search filter inside patientUser
     if (query.search) {
       const regex = new RegExp(query.search, "i");
       matchStage.$or = [
@@ -89,6 +100,8 @@ export const getPatients = async (query = {}, page = 1, limit = 10) => {
     }
 
     const aggregationPipeline = [
+      ...(hospitalId ? [{ $match: preMatchStage }] : []),
+
       {
         $lookup: {
           from: "users",
@@ -98,7 +111,9 @@ export const getPatients = async (query = {}, page = 1, limit = 10) => {
         }
       },
       { $unwind: "$patientUser" },
-      { $match: matchStage },
+
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+
       {
         $facet: {
           data: [
@@ -120,9 +135,8 @@ export const getPatients = async (query = {}, page = 1, limit = 10) => {
     ];
 
     const result = await Patient.aggregate(aggregationPipeline);
-
-    const patients = result[0].data;
-    const total = result[0].totalCount[0]?.count || 0;
+    const patients = result[0]?.data || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
 
     await SystemLog.create({
       action: "patients_viewed",
@@ -131,6 +145,7 @@ export const getPatients = async (query = {}, page = 1, limit = 10) => {
         page,
         limit,
         filters: query,
+        hospitalId: hospitalId || null,
         count: patients.length
       }
     });
@@ -151,7 +166,6 @@ export const getPatients = async (query = {}, page = 1, limit = 10) => {
     };
   }
 };
-
 
 
 export const getPatientById = async (patientId) => {

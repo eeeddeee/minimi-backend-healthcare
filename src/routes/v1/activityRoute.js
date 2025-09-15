@@ -61,4 +61,11 @@ router.patch(
   activityController.updateActivityOutcome
 );
 
+router.post(
+  "/latest-activities-stats",
+  authenticate,
+  authorize(["hospital", "nurse"]),
+  activityController.getHospitalLatestActivities
+);
+
 export default router;

@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import * as activityService from "../services/activityService.js";
 import { ensureAccessToPatient } from "../utils/accessControl.js";
+import Patient from "../models/patientModel.js";
 
 const errorResponse = (res, error, fallback) =>
   res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json({
@@ -109,5 +110,42 @@ export const updateActivityOutcome = async (req, res) => {
     );
   } catch (error) {
     return errorResponse(res, error, "Failed to update activity outcome");
+  }
+};
+
+// export const getLatestActivities = async (req, res) => {
+//   try {
+//     await ensureAccessToPatient(req.user, req.query.patientId);
+//     const result = await activityService.getLatestActivities(
+//       req.query.patientId,
+//       parseInt(req.query.limit) || 4
+//     );
+//     return res.success(
+//       "Latest activities fetched successfully.",
+//       result,
+//       StatusCodes.OK
+//     );
+//   } catch (error) {
+//     return errorResponse(res, error, "Failed to fetch latest activities");
+//   }
+// };
+
+export const getHospitalLatestActivities = async (req, res) => {
+  try {
+    const result = await activityService.getHospitalLatestActivities(
+      req.user,
+      parseInt(req.query.limit) || 4
+    );
+    return res.success(
+      "Hospital latest activities fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      error,
+      "Failed to fetch hospital latest activities"
+    );
   }
 };

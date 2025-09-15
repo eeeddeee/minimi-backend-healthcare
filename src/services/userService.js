@@ -4,6 +4,11 @@ import { StatusCodes } from "http-status-codes";
 import { generateRandomPassword } from "../utils/helper.js";
 import SystemLog from "../models/systemLogModel.js";
 import mongoose from "mongoose";
+import Nurse from "../models/nurseModel.js";
+import Caregiver from "../models/caregiverModel.js";
+import Family from "../models/familyModel.js";
+import Patient from "../models/patientModel.js";
+import BehaviorLog from "../models/behaviorLogModel.js";
 
 const createUserWithRole = async (userData, role, createdBy, session) => {
   const existingEmail = await User.findOne({ email: userData.email }).session(
@@ -81,7 +86,7 @@ export const updateUserBasics = async (userId, updates = {}, session) => {
   // protect fields
   const allowed = [
     "firstName",
-    "lastName",
+    "lastName", 
     "phone",
     "languagePreference",
     "street",
@@ -229,26 +234,31 @@ export const getUserStatsByRole = async (role) => {
   }
 };
 
-export const getUserStatsForAdmin = async () => {
+export const getUserStatsForAdmin = async (startDate, endDate) => {
   try {
-    const roles = [
-      "hospital",
-      "nurse",
-      "caregiver",
-      "family",
-      "patient"
-    ];
-
-    // Initialize an object to store total users for each role
+    const roles = ["hospital", "nurse", "caregiver", "family", "patient"];
+const payment = 0;
     const result = {};
 
-    // Loop through all roles and get the total users for each role
+    const dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter.createdAt = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate)
+      };
+    } else if (startDate) {
+      dateFilter.createdAt = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      dateFilter.createdAt = { $lte: new Date(endDate) };
+    }
+
     for (const role of roles) {
-      const total = await User.countDocuments({ role });
+      const query = { role, ...dateFilter };
+      const total = await User.countDocuments(query);
       result[role] = total;
     }
 
-    return result;
+    return {...result, payment};
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch user stats",
@@ -257,26 +267,51 @@ export const getUserStatsForAdmin = async () => {
   }
 };
 
-
 export const getHospitalStatsByDate = async (startDate, endDate) => {
   try {
+    const startOfDayUTC = (d) =>
+      new Date(
+        Date.UTC(
+          d.getUTCFullYear(),
+          d.getUTCMonth(),
+          d.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+    const endOfDayUTC = (d) =>
+      new Date(
+        Date.UTC(
+          d.getUTCFullYear(),
+          d.getUTCMonth(),
+          d.getUTCDate(),
+          23,
+          59,
+          59,
+          999
+        )
+      );
+
     const today = new Date();
-    const firstDayOfMonth = new Date(today.getFullYear(), today.getMonth(), 1);
+    const firstDayOfMonth = new Date(
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), 1)
+    );
     const lastDayOfMonth = new Date(
-      today.getFullYear(),
-      today.getMonth() + 1,
-      0
+      Date.UTC(today.getUTCFullYear(), today.getUTCMonth() + 1, 0)
     );
 
-    const start = startDate ? new Date(startDate) : firstDayOfMonth;
-    const end = endDate ? new Date(endDate) : lastDayOfMonth;
+    const start = startDate
+      ? startOfDayUTC(new Date(startDate))
+      : startOfDayUTC(firstDayOfMonth);
+    const end = endDate
+      ? endOfDayUTC(new Date(endDate))
+      : endOfDayUTC(lastDayOfMonth);
 
     const allDates = [];
-    const currentDate = new Date(start);
-
-    while (currentDate <= end) {
-      allDates.push(currentDate.toISOString().split("T")[0]);
-      currentDate.setDate(currentDate.getDate() + 1);
+    for (let d = new Date(start); d <= end; d.setUTCDate(d.getUTCDate() + 1)) {
+      allDates.push(d.toISOString().slice(0, 10));
     }
 
     const hospitalsByDate = await User.aggregate([
@@ -289,9 +324,10 @@ export const getHospitalStatsByDate = async (startDate, endDate) => {
       {
         $group: {
           _id: {
-            year: { $year: "$createdAt" },
-            month: { $month: "$createdAt" },
-            day: { $dayOfMonth: "$createdAt" }
+            $dateToString: {
+              format: "%Y-%m-%d",
+              date: "$createdAt" 
+            }
           },
           hospitals: { $sum: 1 }
         }
@@ -299,28 +335,15 @@ export const getHospitalStatsByDate = async (startDate, endDate) => {
       {
         $project: {
           _id: 0,
-          date: {
-            $concat: [
-              { $toString: "$_id.year" },
-              "-",
-              { $toString: "$_id.month" },
-              "-",
-              { $toString: "$_id.day" }
-            ]
-          },
+          date: "$_id",
           hospitals: 1
         }
       }
     ]);
 
-    // Prepare result with all dates and hospital counts (set to 0 if no hospitals on a date)
     const result = allDates.map((date) => {
-      // Find the hospital count for the given date
-      const hospitalData = hospitalsByDate.find((item) => item.date === date);
-      return {
-        date: date,
-        hospitals: hospitalData ? hospitalData.hospitals : 0 // Set to 0 if no hospital found for that date
-      };
+      const found = hospitalsByDate.find((x) => x.date === date);
+      return { date, hospitals: found ? found.hospitals : 0 };
     });
 
     return result;
@@ -332,3 +355,379 @@ export const getHospitalStatsByDate = async (startDate, endDate) => {
   }
 };
 
+export const getNurseStats = async (nurseId, startDate, endDate) => {
+  try {
+    const nurseObjId = new mongoose.Types.ObjectId(nurseId);
+
+    const dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter.date = {
+        $gte: new Date(startDate),
+        $lte: new Date(endDate),
+      };
+    } else if (startDate) {
+      dateFilter.date = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      dateFilter.date = { $lte: new Date(endDate) };
+    }
+
+    const totalPatients = await Patient.countDocuments({
+      nurseIds: nurseObjId,
+    });
+
+    const totalActivePatients = await Patient.countDocuments({
+      nurseIds: nurseObjId,
+      status: "active",
+    });
+
+    const totalActiveCaregivers = await Caregiver.countDocuments({
+      nurseId: nurseObjId,
+      "caregiverUser.isActive": true,
+    });
+
+    const nursePatients = await Patient.find(
+      { nurseIds: nurseObjId },
+      { _id: 1 }
+    ).lean();
+
+    const patientIds = nursePatients.map((p) => p._id);
+
+    const pipeline = [
+      {
+        $match: {
+          patientId: { $in: patientIds },
+          ...(Object.keys(dateFilter).length ? dateFilter : {}),
+          incidents: { $exists: true, $ne: [] },
+        },
+      },
+      {
+        $project: {
+          incidentsCount: { $size: "$incidents" },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$incidentsCount" },
+        },
+      },
+    ];
+
+    const incidentAgg = await BehaviorLog.aggregate(pipeline);
+    const totalTodayIncidents = incidentAgg[0]?.total || 0;
+
+    return {
+      totalPatients,
+      totalActivePatients,
+      totalActiveCaregivers,
+      totalTodayIncidents,
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch nurse stats",
+      statusCode: 500,
+    };
+  }
+};
+
+export const getHospitalStats = async (hospitalId, startDate, endDate) => {
+  try {
+    const hospObjId = new mongoose.Types.ObjectId(hospitalId);
+
+    const buildDateMatch = (path) => {
+      if (!startDate && !endDate) return null;
+      const m = {};
+      if (startDate) m.$gte = new Date(startDate);
+      if (endDate) m.$lte = new Date(endDate);
+      return { [path]: m };
+    };
+
+    const patientDate = buildDateMatch("createdAt");
+    const nurseDate = buildDateMatch("createdAt");
+    const caregiverDate = buildDateMatch("createdAt");
+    const familyDate = buildDateMatch("createdAt");
+
+    const patientPipeline = [
+      { $match: { hospitalId: hospObjId, ...(patientDate || {}) } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "patientUserId",
+          foreignField: "_id",
+          as: "u"
+        }
+      },
+      { $unwind: "$u" },
+      {
+        $group: {
+          _id: "$u.isActive",
+          count: { $sum: 1 }
+        }
+      }
+    ];
+
+    const nursePipeline = [
+      { $match: { ...(nurseDate || {}) /*, hospitalId: hospObjId*/ } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "nurseUserId",
+          foreignField: "_id",
+          as: "u"
+        }
+      },
+      { $unwind: "$u" },
+
+      { $match: { "u.createdBy": hospObjId } },
+      {
+        $group: {
+          _id: "$u.isActive",
+          count: { $sum: 1 }
+        }
+      }
+    ];
+
+    const caregiverPipeline = [
+      { $match: { hospitalId: hospObjId, ...(caregiverDate || {}) } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "caregiverUserId",
+          foreignField: "_id",
+          as: "u"
+        }
+      },
+      { $unwind: "$u" },
+      {
+        $group: {
+          _id: "$u.isActive",
+          count: { $sum: 1 }
+        }
+      }
+    ];
+
+    const familyPipeline = [
+      { $match: { ...(familyDate || {}) } },
+      {
+        $lookup: {
+          from: "patients",
+          localField: "patientId",
+          foreignField: "_id",
+          as: "p"
+        }
+      },
+      { $unwind: "$p" },
+      { $match: { "p.hospitalId": hospObjId } },
+      {
+        $lookup: {
+          from: "users",
+          localField: "familyMemberUserId",
+          foreignField: "_id",
+          as: "u"
+        }
+      },
+      { $unwind: "$u" },
+      {
+        $group: {
+          _id: "$u.isActive",
+          count: { $sum: 1 }
+        }
+      }
+    ];
+    const [pAgg, nAgg, cAgg, fAgg] = await Promise.all([
+      Patient.aggregate(patientPipeline),
+      Nurse.aggregate(nursePipeline),
+      Caregiver.aggregate(caregiverPipeline),
+      Family.aggregate(familyPipeline)
+    ]);
+
+    const split = (agg) => ({
+      active: agg.find((d) => d._id === true)?.count || 0,
+      inactive: agg.find((d) => d._id === false)?.count || 0
+    });
+
+    const p = split(pAgg);
+    const n = split(nAgg);
+    const c = split(cAgg);
+    const f = split(fAgg);
+
+    return {
+      totalActivePatients: p.active,
+      totalInActivePatients: p.inactive,
+
+      totalActiveNurses: n.active,
+      totalInActiveNurses: n.inactive,
+
+      totalActiveCaregivers: c.active,
+      totalInActiveCaregivers: c.inactive,
+
+      totalActiveFamilys: f.active,
+      totalInActiveFamilys: f.inactive
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch hospital stats",
+      statusCode: error.statusCode || 500
+    };
+  }
+};
+
+const listByRole = async ({
+  model,
+  localUserField,
+  asName,
+  listKey,
+  query = {},
+  page = 1,
+  limit = 10,
+  hospitalId,
+}) => {
+  try {
+    const skip = (page - 1) * limit;
+
+    const toObjectId = (id) =>
+      mongoose.Types.ObjectId.isValid(id)
+        ? new mongoose.Types.ObjectId(id)
+        : null;
+    const matchStage = {};
+    if (hospitalId) {
+      const hospObjId = toObjectId(hospitalId);
+      if (hospObjId) {
+        matchStage[`${asName}.createdBy`] = hospObjId;
+      } else {
+        matchStage[`${asName}.createdBy`] = hospitalId;
+      }
+    }
+    console.log(matchStage," matchStage");
+
+    // const matchStage = {};
+    // if (hospitalId) {
+    //   matchStage[`${asName}.createdBy`] = hospitalId;
+    // }
+    // console.log(matchStage," matchStage");
+
+    if (query.isActive !== undefined) {
+      matchStage[`${asName}.isActive`] = query.isActive === "true";
+    }
+
+    if (query.search) {
+      const regex = new RegExp(query.search, "i");
+      matchStage.$or = [
+        { [`${asName}.firstName`]: regex },
+        { [`${asName}.lastName`]: regex },
+        { [`${asName}.email`]: regex },
+        { [`${asName}.phone`]: regex },
+      ];
+    }
+
+    const aggregationPipeline = [
+      {
+        $lookup: {
+          from: "users",
+          localField: localUserField,
+          foreignField: "_id",
+          as: asName,
+        },
+      },
+      { $unwind: `$${asName}` },
+      { $match: matchStage },
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                __v: 0,
+                [`${asName}.passwordHash`]: 0,
+                [`${asName}.__v`]: 0,
+                [`${asName}.accessToken`]: 0,
+                [`${asName}.refreshToken`]: 0,
+              },
+            },
+          ],
+          totalCount: [{ $count: "count" }],
+        },
+      },
+    ];
+
+    const result = await model.aggregate(aggregationPipeline);
+    const list = result[0].data;
+    const total = result[0].totalCount[0]?.count || 0;
+
+    await SystemLog.create({
+      action: `${listKey}_viewed`,
+      entityType: listKey.slice(0, -1),
+      metadata: {
+        page,
+        limit,
+        filters: query,
+        count: list.length,
+        hospitalId: hospitalId || null,
+      },
+    });
+
+    return {
+      [listKey]: list,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  } catch (error) {
+    throw {
+      message: error.message || `Failed to fetch ${listKey}`,
+      statusCode: 500,
+    };
+  }
+};
+
+export const getNurses = (query = {}, page = 1, limit = 10, hospitalId) =>
+  listByRole({
+    model: Nurse,
+    localUserField: "nurseUserId",
+    asName: "nurseUser",
+    listKey: "nurses",
+    query,
+    page,
+    limit,
+    hospitalId,
+  });
+
+export const getCaregivers = (query = {}, page = 1, limit = 10, hospitalId) =>
+  listByRole({
+    model: Caregiver,
+    localUserField: "caregiverUserId",
+    asName: "caregiverUser",
+    listKey: "caregivers",
+    query,
+    page,
+    limit,
+    hospitalId,
+  });
+
+export const getFamilies = (query = {}, page = 1, limit = 10, hospitalId) =>
+  listByRole({
+    model: Family,
+    localUserField: "familyMemberUserId",
+    asName: "familyUser",
+    listKey: "familyMembers",
+    query,
+    page,
+    limit,
+    hospitalId
+  });
+
+export const getPatients = (query = {}, page = 1, limit = 10, hospitalId) =>
+  listByRole({
+    model: Patient,
+    localUserField: "patientUserId",
+    asName: "patientUser",
+    listKey: "patients",
+    query,
+    page,
+    limit,
+    hospitalId,
+  });

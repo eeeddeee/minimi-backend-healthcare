@@ -2,6 +2,7 @@ import FamilyMember from "../models/familyModel.js";
 import Patient from "../models/patientModel.js";
 import { StatusCodes } from "http-status-codes";
 import SystemLog from "../models/systemLogModel.js";
+import mongoose from "mongoose";
 
 export const createFamilyMember = async (familyData, createdBy, session) => {
   const existingRelationship = await FamilyMember.findOne({
@@ -34,18 +35,15 @@ export const createFamilyMember = async (familyData, createdBy, session) => {
   return familyMember[0].toObject();
 };
 
-export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
+
+export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
 
     const matchStage = {};
-
-    // Filter by isActive inside familyMemberUserId
     if (query.isActive !== undefined) {
       matchStage["familyUser.isActive"] = query.isActive === "true";
     }
-
-    // Search filter inside familyMemberUserId
     if (query.search) {
       const regex = new RegExp(query.search, "i");
       matchStage.$or = [
@@ -54,6 +52,13 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         { "familyUser.email": regex },
         { "familyUser.phone": regex }
       ];
+    }
+
+    let hospObjId = null;
+    if (hospitalId) {
+      hospObjId = mongoose.Types.ObjectId.isValid(hospitalId)
+        ? new mongoose.Types.ObjectId(hospitalId)
+        : hospitalId;
     }
 
     const aggregationPipeline = [
@@ -66,6 +71,7 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         }
       },
       { $unwind: "$familyUser" },
+
       {
         $lookup: {
           from: "patients",
@@ -75,6 +81,9 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         }
       },
       { $unwind: { path: "$patient", preserveNullAndEmptyArrays: true } },
+
+      ...(hospObjId ? [{ $match: { "patient.hospitalId": hospObjId } }] : []),
+
       {
         $lookup: {
           from: "users",
@@ -84,7 +93,9 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         }
       },
       { $unwind: { path: "$patientUser", preserveNullAndEmptyArrays: true } },
-      { $match: matchStage },
+
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+
       {
         $facet: {
           data: [
@@ -109,10 +120,11 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         }
       }
     ];
+
     const result = await FamilyMember.aggregate(aggregationPipeline);
 
-    const familyMembers = result[0].data;
-    const total = result[0].totalCount[0]?.count || 0;
+    const familyMembers = result[0]?.data || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
 
     await SystemLog.create({
       action: "family_members_viewed",
@@ -121,6 +133,7 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
         page,
         limit,
         filters: query,
+        hospitalId: hospitalId || null,
         count: familyMembers.length
       }
     });
@@ -141,7 +154,6 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10) => {
     };
   }
 };
-
 
 // GET BY ID
 export const getFamilyMemberById = async (familyMemberId) => {

@@ -9,7 +9,6 @@ export const getNurses = async (req, res) => {
   try {
     const { page = 1, limit = 10, search, isActive } = req.query;
     const hospitalId = req.user?._id;
-    // console.log(hospitalId,"HOSPITAL ID");
 
     const filters = {
       search,

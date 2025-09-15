@@ -202,3 +202,32 @@ export const updateReminderLog = async (req, res) => {
     return errorResponse(res, error, "Failed to update medication log");
   }
 };
+
+export const getNurseLatestReminders = async (req, res) => {
+  try {
+    if (req.user.role !== "nurse") {
+      return res.error(
+        "Access denied. Only nurses can access this resource.",
+        null,
+        StatusCodes.FORBIDDEN
+      );
+    }
+
+    const result = await medicationService.getNurseLatestReminders(
+      req.user,
+      parseInt(req.query.limit) || 4
+    );
+
+    return res.success(
+      "Latest medication reminders fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return errorResponse(
+      res,
+      error,
+      "Failed to fetch latest medication reminders"
+    );
+  }
+};

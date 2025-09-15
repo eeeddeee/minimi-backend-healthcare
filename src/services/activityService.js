@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
-import  Activity  from "../models/activityModel.js";
+import Activity from "../models/activityModel.js";
 import SystemLog from "../models/systemLogModel.js";
+import Patient from "../models/patientModel.js";
 
 // Create
 export const createActivity = async (data, createdBy) => {
@@ -36,6 +37,14 @@ export const getActivities = async (filters = {}, page = 1, limit = 10) => {
       .limit(limit)
       .sort({ "schedule.start": 1 })
       .select("-__v")
+      .populate({
+        path: "patientId",
+        select: "patientUserId",
+        populate: {
+          path: "patientUserId",
+          select: "firstName lastName"
+        }
+      })
       .lean(),
     Activity.countDocuments(query)
   ]);
@@ -135,3 +144,114 @@ export const updateActivityOutcome = async (id, outcome, notes) => {
 
   return updated;
 };
+
+
+
+export const getHospitalLatestActivities = async (user, limit = 4) => {
+  let patientIds = [];
+
+  switch (user.role) {
+
+    case "hospital":
+      const hospitalPatients = await Patient.find({
+        hospitalId: user._id || user.hospitalId
+      })
+        .select("_id")
+        .lean();
+      patientIds = hospitalPatients.map((p) => p._id);
+      break;
+
+    case "nurse":
+      const nursePatients = await Patient.find({
+        nurseIds: { $in: [user._id] }
+      })
+        .select("_id")
+        .lean();
+      patientIds = nursePatients.map((p) => p._id);
+      break;
+
+    case "caregiver":
+      const caregiverPatients = await Patient.find({
+        $or: [
+          { primaryCaregiverId: user._id },
+          { secondaryCaregiverIds: { $in: [user._id] } }
+        ]
+      })
+        .select("_id")
+        .lean();
+      patientIds = caregiverPatients.map((p) => p._id);
+      break;
+
+    case "patient":
+      const patientUser = await Patient.findOne({
+        patientUserId: user._id
+      })
+        .select("_id")
+        .lean();
+      patientIds = patientUser ? [patientUser._id] : [];
+      break;
+
+    default:
+      throw new Error("Unauthorized access");
+  }
+
+  if (patientIds.length === 0) {
+    return {
+      activities: [],
+      count: 0
+    };
+  }
+
+  const activities = await Activity.find({
+    patientId: { $in: patientIds }
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .select("-__v")
+    .populate({
+      path: "patientId",
+      select: "patientUserId",
+      populate: {
+        path: "patientUserId",
+        select: "firstName lastName"
+      }
+    })
+    .lean();
+
+  await SystemLog.create({
+    action: "hospital_latest_activities_viewed",
+    entityType: "Activity",
+    metadata: {
+      userRole: user.role,
+      userId: user._id,
+      limit,
+      count: activities.length
+    }
+  });
+
+  return {
+    activities,
+    count: activities.length
+  };
+};
+
+// export const getLatestActivities = async (patientId, limit = 4) => {
+//   const query = { patientId };
+
+//   const activities = await Activity.find(query)
+//     .sort({ createdAt: -1 })
+//     .limit(limit)
+//     .select("-__v")
+//     .lean();
+
+//   await SystemLog.create({
+//     action: "latest_activities_viewed",
+//     entityType: "Activity",
+//     metadata: { patientId, limit, count: activities.length }
+//   });
+
+//   return {
+//     activities,
+//     count: activities.length
+//   };
+// };

@@ -2,6 +2,7 @@ import Caregiver from "../models/caregiverModel.js";
 import Patient from "../models/patientModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import { StatusCodes } from "http-status-codes";
+import mongoose from "mongoose";
 
 export const createCaregiver = async (caregiverData, createdBy, session) => {
   const caregiver = await Caregiver.create([{ ...caregiverData, createdBy }], {
@@ -10,18 +11,24 @@ export const createCaregiver = async (caregiverData, createdBy, session) => {
   return caregiver[0].toObject();
 };
 
-export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
+export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
 
-    const matchStage = {};
+    const preMatchStage = {};
+    if (hospitalId) {
+      const hospObjId = mongoose.Types.ObjectId.isValid(hospitalId)
+        ? new mongoose.Types.ObjectId(hospitalId)
+        : hospitalId;
+      preMatchStage.hospitalId = hospObjId;
 
-    // Filter by isActive inside caregiverUser
+      // preMatchStage.createdBy = hospObjId;
+    }
+
+    const matchStage = {};
     if (query.isActive !== undefined) {
       matchStage["caregiverUser.isActive"] = query.isActive === "true";
     }
-
-    // Search filter inside caregiverUser
     if (query.search) {
       const regex = new RegExp(query.search, "i");
       matchStage.$or = [
@@ -33,6 +40,8 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
     }
 
     const aggregationPipeline = [
+      ...(hospitalId ? [{ $match: preMatchStage }] : []),
+
       {
         $lookup: {
           from: "users",
@@ -42,7 +51,9 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
         }
       },
       { $unwind: "$caregiverUser" },
-      { $match: matchStage },
+
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+
       {
         $facet: {
           data: [
@@ -64,9 +75,8 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
     ];
 
     const result = await Caregiver.aggregate(aggregationPipeline);
-
-    const caregivers = result[0].data;
-    const total = result[0].totalCount[0]?.count || 0;
+    const caregivers = result[0]?.data || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
 
     await SystemLog.create({
       action: "caregivers_viewed",
@@ -75,9 +85,11 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
         page,
         limit,
         filters: query,
+        hospitalId: hospitalId || null,
         count: caregivers.length
       }
     });
+
     return {
       caregivers,
       pagination: {
@@ -94,7 +106,6 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10) => {
     };
   }
 };
-
 
 // GET Caregiver by ID
 export const getCaregiverById = async (caregiverId) => {

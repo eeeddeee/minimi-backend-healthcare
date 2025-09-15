@@ -14,7 +14,7 @@ const router = express.Router();
 router.get(
   "/",
   authenticate,
-  authorize(["super_admin", "hospital"]),
+  authorize(["hospital"]),
   nurseController.getNurses
 );
 

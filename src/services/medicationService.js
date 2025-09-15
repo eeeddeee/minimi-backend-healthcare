@@ -3,6 +3,7 @@ import MedicationReminder from "../models/medicationReminderModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import { StatusCodes } from "http-status-codes";
 import mongoose from "mongoose";
+import Patient from "../models/patientModel.js";
 
 // Create plan/schedule
 export const createReminder = async (data, createdBy) => {
@@ -255,7 +256,6 @@ export const getReminderLogs = async (
 //   return updated.logs.find((log) => String(log._id) === String(logId));
 // };
 
-
 // // Update a specific log
 export const updateReminderLog = async (logId, updates = {}) => {
   const filter = { "logs._id": new mongoose.Types.ObjectId(logId) };
@@ -289,7 +289,56 @@ export const updateReminderLog = async (logId, updates = {}) => {
     metadata: { logId, fields: Object.keys(updates) }
   });
 
-  // Return just the updated log
   const log = (updated.logs || []).find((l) => String(l._id) === String(logId));
   return log;
+};
+
+export const getNurseLatestReminders = async (nurse, limit = 4) => {
+  const nursePatients = await Patient.find({
+    nurseIds: { $in: [nurse._id] }
+  })
+    .select("_id")
+    .lean();
+
+  const patientIds = nursePatients.map((p) => p._id);
+
+  if (patientIds.length === 0) {
+    return {
+      reminders: [],
+      count: 0
+    };
+  }
+
+  const reminders = await MedicationReminder.find({
+    patientId: { $in: patientIds }
+  })
+    .sort({ createdAt: -1 })
+    .limit(limit)
+    .select("-__v")
+    .populate({ path: "createdBy", select: "firstName lastName email" })
+    .populate({
+      path: "patientId",
+      select: "patientUserId",
+      populate: {
+        path: "patientUserId",
+        select: "firstName lastName"
+      }
+    })
+    .lean();
+
+  await SystemLog.create({
+    action: "nurse_latest_medication_reminders_viewed",
+    entityType: "MedicationReminder",
+    metadata: {
+      nurseId: nurse._id,
+      limit,
+      count: reminders.length,
+      patientCount: patientIds.length
+    }
+  });
+
+  return {
+    reminders,
+    count: reminders.length
+  };
 };

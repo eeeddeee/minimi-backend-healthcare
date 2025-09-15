@@ -9,6 +9,8 @@ export const getPatients = async (req, res) => {
   try {
     const { page = 1, limit = 10, isActive, search } = req.query;
 
+    const hospitalId = req.user?._id;
+
     const filters = {};
     if (isActive !== undefined) {
       filters.isActive = isActive;
@@ -20,7 +22,8 @@ export const getPatients = async (req, res) => {
     const result = await patientService.getPatients(
       filters,
       parseInt(page),
-      parseInt(limit)
+      parseInt(limit),
+      hospitalId
     );
 
     return res.success(

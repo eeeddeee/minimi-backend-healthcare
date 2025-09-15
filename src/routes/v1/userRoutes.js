@@ -73,15 +73,55 @@ router.get(
 router.get(
   "/all-stats",
   authenticate,
-  authorize(["super_admin", "hospital", "nurse"]),
+  authorize(["super_admin"]),
   userController.getUserStatsForAdmin
 );
 
 router.get(
   "/hospital-graph-stats",
   authenticate,
-  authorize(["super_admin", "hospital", "nurse"]),
+  authorize(["super_admin"]),
   userController.getHospitalStatsByDate
+);
+
+router.get(
+  "/hospital-cards-stats",
+  authenticate,
+  authorize(["hospital"]),
+  userController.getHospitalStats
+);
+
+router.get(
+  "/nurse-cards-stats",
+  authenticate,
+  authorize(["nurse"]),
+  userController.getNurseStats
+);
+
+
+router.post(
+  "/get-nurses",
+  authenticate,
+  authorize(["super_admin"]),
+  userController.getNurses
+);
+router.post(
+  "/get-caregivers",
+  authenticate,
+  authorize(["super_admin"]),
+  userController.getCaregivers
+);
+router.post(
+  "/get-families",
+  authenticate,
+  authorize(["super_admin"]),
+  userController.getFamilies
+);
+router.post(
+  "/get-patients",
+  authenticate,
+  authorize(["super_admin"]),
+  userController.getPatients
 );
 
 
