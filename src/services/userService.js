@@ -207,18 +207,26 @@ export const updateUserStatus = async (
   return user;
 };
 
-export const getUserStatsByRole = async (role) => {
+export const getUserStatsByRole = async (role, hospitalId) => {
   try {
     if (!role) {
-      throw {
-        message: "Role is required",
-        statusCode: 400
-      };
+      throw { message: "Role is required", statusCode: 400 };
     }
 
-    const total = await User.countDocuments({ role });
-    const active = await User.countDocuments({ role, isActive: true });
-    const inactive = await User.countDocuments({ role, isActive: false });
+    const base = { role };
+
+    if (hospitalId) {
+      const hospObjId = mongoose.Types.ObjectId.isValid(hospitalId)
+        ? new mongoose.Types.ObjectId(hospitalId)
+        : hospitalId;
+      base.createdBy = hospObjId;
+    }
+
+    const [total, active, inactive] = await Promise.all([
+      User.countDocuments(base),
+      User.countDocuments({ ...base, isActive: true }),
+      User.countDocuments({ ...base, isActive: false })
+    ]);
 
     return {
       role,
@@ -233,6 +241,33 @@ export const getUserStatsByRole = async (role) => {
     };
   }
 };
+
+// export const getUserStatsByRole = async (role) => {
+//   try {
+//     if (!role) {
+//       throw {
+//         message: "Role is required",
+//         statusCode: 400
+//       };
+//     }
+
+//     const total = await User.countDocuments({ role });
+//     const active = await User.countDocuments({ role, isActive: true });
+//     const inactive = await User.countDocuments({ role, isActive: false });
+
+//     return {
+//       role,
+//       totalUsers: total,
+//       activeUsers: active,
+//       inactiveUsers: inactive
+//     };
+//   } catch (error) {
+//     throw {
+//       message: error.message || "Failed to fetch user stats",
+//       statusCode: error.statusCode || 500
+//     };
+//   }
+// };
 
 export const getUserStatsForAdmin = async (startDate, endDate) => {
   try {

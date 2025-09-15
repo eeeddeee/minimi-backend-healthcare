@@ -450,24 +450,41 @@ export const updateUserProfile = async (req, res) => {
 
 export const getUserStatsByRole = async (req, res) => {
   try {
-    const { role } = req.query;
+    const { role, hospitalId: hospitalIdFromQuery } = req.query;
 
-    const result = await userService.getUserStatsByRole(role);
+    const hospitalId =
+      req.user?.role === "hospital" ? req.user._id : hospitalIdFromQuery || undefined;
 
-    return res.success(
-      "User stats fetched successfully.",
-      result,
-      StatusCodes.OK
-    );
+    const result = await userService.getUserStatsByRole(role, hospitalId);
+
+    return res.success("User stats fetched successfully.", result, StatusCodes.OK);
   } catch (error) {
     return res
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
-      .json({
-        success: false,
-        message: error.message
-      });
+      .json({ success: false, message: error.message });
   }
 };
+
+// export const getUserStatsByRole = async (req, res) => {
+//   try {
+//     const { role } = req.query;
+
+//     const result = await userService.getUserStatsByRole(role);
+
+//     return res.success(
+//       "User stats fetched successfully.",
+//       result,
+//       StatusCodes.OK
+//     );
+//   } catch (error) {
+//     return res
+//       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+//       .json({
+//         success: false,
+//         message: error.message
+//       });
+//   }
+// };
 
 export const getUserStatsForAdmin = async (req, res) => {
   try {
