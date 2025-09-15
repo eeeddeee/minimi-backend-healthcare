@@ -107,6 +107,102 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
   }
 };
 
+export const getCaregiversForNurse = async (
+  query = {},
+  page = 1,
+  limit = 10,
+  nurseIdsToMatch = []
+) => {
+  try {
+    const skip = (page - 1) * limit;
+
+    const ids = (Array.isArray(nurseIdsToMatch) ? nurseIdsToMatch : [nurseIdsToMatch])
+      .filter(Boolean)
+      .map(id => mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id);
+
+    if (!ids.length) {
+      throw { statusCode: 400, message: "Nurse id is required" };
+    }
+    const preMatchStage = { nurseId: { $in: ids } };
+    const matchStage = {};
+    if (query.isActive !== undefined) {
+      matchStage["caregiverUser.isActive"] = query.isActive === "true";
+    }
+    if (query.search) {
+      const regex = new RegExp(query.search, "i");
+      matchStage.$or = [
+        { "caregiverUser.firstName": regex },
+        { "caregiverUser.lastName": regex },
+        { "caregiverUser.email": regex },
+        { "caregiverUser.phone": regex }
+      ];
+    }
+
+    const pipeline = [
+      { $match: preMatchStage },
+      {
+        $lookup: {
+          from: "users",
+          localField: "caregiverUserId",
+          foreignField: "_id",
+          as: "caregiverUser"
+        }
+      },
+      { $unwind: "$caregiverUser" },
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+      {
+        $facet: {
+          data: [
+            { $skip: skip },
+            { $limit: limit },
+            {
+              $project: {
+                __v: 0,
+                "caregiverUser.passwordHash": 0,
+                "caregiverUser.__v": 0,
+                "caregiverUser.accessToken": 0,
+                "caregiverUser.refreshToken": 0
+              }
+            }
+          ],
+          totalCount: [{ $count: "count" }]
+        }
+      }
+    ];
+
+    const result = await Caregiver.aggregate(pipeline);
+    const caregivers = result[0]?.data || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
+
+    await SystemLog.create({
+      action: "caregivers_viewed_by_nurse",
+      entityType: "Caregiver",
+      metadata: {
+        page,
+        limit,
+        filters: query,
+        nurseIds: ids,
+        count: caregivers.length
+      }
+    });
+    return {
+      caregivers,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit)
+      }
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch nurse caregivers",
+      statusCode: error.statusCode || 500
+    };
+  }
+};
+
+
 // GET Caregiver by ID
 export const getCaregiverById = async (caregiverId) => {
   try {

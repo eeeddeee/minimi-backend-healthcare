@@ -34,4 +34,11 @@ router.patch(
   patientController.updatePatientStatus
 );
 
+router.post(
+  "/get-nurse-patients",
+  authenticate,
+  authorize(["nurse"]),
+  patientController.getNursePatients
+);
+
 export default router;

@@ -2,6 +2,7 @@ import * as caregiverService from "../services/caregiverService.js";
 import { uploadBufferToS3 } from "../utils/s3Service.js";
 import * as userService from "../services/userService.js";
 import { StatusCodes } from "http-status-codes";
+import Nurse from "../models/nurseModel.js";
 import mongoose from "mongoose";
 
 // GET ALL
@@ -40,6 +41,45 @@ export const getCaregivers = async (req, res) => {
       });
   }
 };
+
+export const getNurseCaregivers = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, isActive, search } = req.query;
+
+    const nurseUserId = req.user?._id;
+
+    let nurseDocId = null;
+    if (mongoose.Types.ObjectId.isValid(nurseUserId)) {
+      const nurseDoc = await Nurse.findOne(
+        { nurseUserId: new mongoose.Types.ObjectId(nurseUserId) },
+        { _id: 1 }
+      ).lean();
+      nurseDocId = nurseDoc?._id || null;
+    }
+
+    const filters = {};
+    if (isActive !== undefined) filters.isActive = isActive;
+    if (search) filters.search = search;
+
+    const result = await caregiverService.getCaregiversForNurse(
+      filters,
+      parseInt(page),
+      parseInt(limit),
+      [nurseUserId, nurseDocId].filter(Boolean)
+    );
+
+    return res.success(
+      "Caregivers fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
 
 
 // GET BY ID

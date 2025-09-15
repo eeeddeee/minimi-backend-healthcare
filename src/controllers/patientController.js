@@ -2,14 +2,17 @@ import * as patientService from "../services/patientService.js";
 import { StatusCodes } from "http-status-codes";
 import { uploadBufferToS3 } from "../utils/s3Service.js";
 import * as userService from "../services/userService.js";
+import Nurse from "../models/nurseModel.js";
 import Hospital from "../models/hospitalModel.js";
 import mongoose from "mongoose";
+
 
 export const getPatients = async (req, res) => {
   try {
     const { page = 1, limit = 10, isActive, search } = req.query;
 
     const hospitalId = req.user?._id;
+    console.log(hospitalId,"Hospital ID")
 
     const filters = {};
     if (isActive !== undefined) {
@@ -41,6 +44,83 @@ export const getPatients = async (req, res) => {
   }
 };
 
+export const getNursePatients = async (req, res) => {
+  try {
+    const { page = 1, limit = 10, isActive, search } = req.query;
+
+    const nurseUserId = req.user?._id;
+    let nurseDocId = null;
+    if (mongoose.Types.ObjectId.isValid(nurseUserId)) {
+      const nurseDoc = await Nurse.findOne(
+        { nurseUserId: new mongoose.Types.ObjectId(nurseUserId) },
+        { _id: 1 }
+      ).lean();
+      nurseDocId = nurseDoc?._id || null;
+    }
+
+    const filters = {};
+    if (isActive !== undefined) filters.isActive = isActive;
+    if (search) filters.search = search;
+
+    const result = await patientService.getPatientsForNurse(
+      filters,
+      parseInt(page),
+      parseInt(limit),
+      [nurseUserId, nurseDocId].filter(Boolean)
+    );
+
+    return res.success(
+      "Patients fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
+// export const getNursePatients = async (req, res) => {
+//   try {
+//     const { page = 1, limit = 10, isActive, search } = req.query;
+
+//     const nurseUserId = req.user?._id;
+//     console.log(nurseUserId, "Nurse ID")
+//     const nurse = await Nurse.findOne(
+//       { nurseUserId: new mongoose.Types.ObjectId(nurseUserId) },
+//       { _id: 1 }
+//     ).lean();
+
+//     if (!nurse) {
+//       return res.status(StatusCodes.NOT_FOUND).json({
+//         success: false,
+//         message: "Nurse profile not found for this user."
+//       });
+//     }
+
+//     const filters = {};
+//     if (isActive !== undefined) filters.isActive = isActive;
+//     if (search) filters.search = search;
+
+//     const result = await patientService.getPatientsForNurse(
+//       filters,
+//       parseInt(page),
+//       parseInt(limit),
+//       nurse._id
+//     );
+
+//     return res.success(
+//       "Patients fetched successfully.",
+//       result,
+//       StatusCodes.OK
+//     );
+//   } catch (error) {
+//     return res
+//       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+//       .json({ success: false, message: error.message });
+//   }
+// };
 
 
 export const getPatient = async (req, res) => {

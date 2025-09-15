@@ -34,6 +34,13 @@ router.patch(
   caregiverController.updateCaregiverStatus
 );
 
+router.post(
+  "/get-nurse-caregivers",
+  authenticate,
+  authorize(["nurse"]),
+  caregiverController.getNurseCaregivers
+);
+
 // router.put("/caregiver/:id", caregiverController.updateCaregiverProfile);
 
 export default router;

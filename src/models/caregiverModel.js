@@ -58,5 +58,7 @@ const caregiverSchema = new mongoose.Schema({
   }
 });
 
+caregiverSchema.index({ nurseId: 1 });
+
 const Caregiver = mongoose.model("Caregiver", caregiverSchema);
 export default Caregiver;

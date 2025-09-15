@@ -89,21 +89,22 @@ patientSchema.pre("save", async function (next) {
       .sort({ createdAt: -1 })
       .limit(1);
 
-    let nextPatientNumber = "PTN00001"; // Default to first patient number
+    let nextPatientNumber = "PTN00001";
 
     if (lastPatient && lastPatient.patientNumber) {
-      // Extract the numeric part of the last patient number and increment it
+
       const lastPatientNumber = lastPatient.patientNumber;
       const numericPart = parseInt(lastPatientNumber.replace("PTN", ""));
       nextPatientNumber = `PTN${(numericPart + 1).toString().padStart(5, "0")}`;
     }
 
-    // Assign the generated patient number
+
     this.patientNumber = nextPatientNumber;
   }
   next();
 });
 
+patientSchema.index({ nurseIds: 1 });
 
 const Patient = mongoose.model("Patient", patientSchema);
 export default Patient;
