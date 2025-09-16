@@ -47,9 +47,8 @@ app.use(helmet());
 const allowedOrigins = [
   "*",
   "http://localhost:5173",
-  "https://minimi-frontend-healthcare.vercel.app/",
-  "https://minimi-frontend-healthcare.vercel.app",
-  "https://minimi-frontend-healthcare.vercel.app/login",
+  "https://minimi-healthcare.onrender.com",
+  "https://minimi-healthcare.onrender.com/login",
   "ws://localhost:*",
   "wss://*"
 ];
