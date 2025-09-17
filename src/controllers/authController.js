@@ -33,6 +33,8 @@ export const login = async (req, res) => {
         country: user.country,
         dateOfBirth: user.dateOfBirth,
         gender: user.gender,
+        isPayment: user.isPayment,
+        subscription: user.subscription,
         token
       },
       StatusCodes.OK

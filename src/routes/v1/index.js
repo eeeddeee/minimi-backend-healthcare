@@ -16,6 +16,8 @@ import eLearningRoute from "./eLearningRoute.js";
 import incidentsRoute from "./incidentRoutes.js";
 import messagesRoute from "./messagingRoute.js";
 import patStatusHistoryRoute from "./patientStatusHistoryRoute.js";
+import paymentRoute from "./paymentRoutes.js";
+
 
 // import systemLogRoute from "./systemLogRoute.js";
 // import adminStatsRoute from "./adminStatsRoute.js";
@@ -42,7 +44,8 @@ const defaultIRoute = [
   { path: "/e-learning", route: eLearningRoute },
   { path: "/incidents", route: incidentsRoute },
   { path: "/conversations", route: messagesRoute },
-  { path: "/", route: patStatusHistoryRoute }
+  { path: "/", route: patStatusHistoryRoute },
+  {path: "/payment", route: paymentRoute}
 ];
 
 defaultIRoute.forEach((route) => {

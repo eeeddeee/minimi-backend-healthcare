@@ -7,7 +7,6 @@ export const authenticate = async (req, res, next) => {
   try {
     let token;
 
-    // Check Authorization header
     if (req.headers.authorization?.startsWith("Bearer")) {
       token = req.headers.authorization.split(" ")[1];
     }
@@ -15,51 +14,59 @@ export const authenticate = async (req, res, next) => {
     if (!token) {
       return res.status(StatusCodes.UNAUTHORIZED).json({
         success: false,
-        message: "Not authorized to access this route"
+        message: "Not authorized to access this route",
       });
     }
 
-    // Verify token
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
 
-    // Check if user still exists
     const user = await User.findOne({
       _id: decoded.id,
-      securityId: decoded.securityId // HIPAA verification
+      securityId: decoded.securityId,
     });
 
     if (!user) {
       return res.status(StatusCodes.UNAUTHORIZED).json({
         success: false,
-        message: "User no longer exists"
+        message: "User no longer exists",
       });
     }
 
-    // // Check if token was invalidated
-    // if (user.accessToken !== token) {
-    //   return res.status(StatusCodes.UNAUTHORIZED).json({
-    //     success: false,
-    //     message: "Session expired"
-    //   });
-    // }
-
-    // Change this check in authenticate middleware:
     if (user.accessToken && user.accessToken !== token) {
       return res.status(StatusCodes.UNAUTHORIZED).json({
         success: false,
-        message: "Session expired"
+        message: "Session expired",
       });
     }
 
-    // HIPAA access log
+    if (user.role !== "super_admin") {
+      let hospitalId = null;
+
+      if (user.role === "hospital") {
+        hospitalId = user._id;
+      } else {
+        hospitalId = user.createdBy;
+      }
+
+      if (hospitalId) {
+        const hospital = await User.findById(hospitalId).select("isPayment role");
+        if (!hospital || hospital.role !== "hospital" || hospital.isPayment !== true) {
+          return res.status(StatusCodes.FORBIDDEN).json({
+            success: false,
+            message: "Hospital subscription inactive. Access denied.",
+          });
+        }
+      }
+    }
+
     await SystemLog.create({
       action: "api_access",
       entityType: "User",
       entityId: user._id,
       metadata: {
         path: req.path,
-        method: req.method
-      }
+        method: req.method,
+      },
     });
 
     req.user = user;
@@ -67,22 +74,10 @@ export const authenticate = async (req, res, next) => {
   } catch (err) {
     return res.status(StatusCodes.UNAUTHORIZED).json({
       success: false,
-      message: "Not authorized to access this route"
+      message: "Not authorized to access this route",
     });
   }
 };
-
-// export const authorize = (...roles) => {
-//   return (req, res, next) => {
-//     if (!roles.includes(req.user.role)) {
-//       return res.status(StatusCodes.FORBIDDEN).json({
-//         success: false,
-//         message: `Role (${req.user.role}) is not allowed`
-//       });
-//     }
-//     next();
-//   };
-// };
 
 export const authorize = (allowedRoles) => {
   return (req, res, next) => {
@@ -99,6 +94,88 @@ export const authorize = (allowedRoles) => {
     next();
   };
 };
+
+
+// export const authenticate = async (req, res, next) => {
+//   try {
+//     let token;
+
+//     // Check Authorization header
+//     if (req.headers.authorization?.startsWith("Bearer")) {
+//       token = req.headers.authorization.split(" ")[1];
+//     }
+
+//     if (!token) {
+//       return res.status(StatusCodes.UNAUTHORIZED).json({
+//         success: false,
+//         message: "Not authorized to access this route"
+//       });
+//     }
+
+//     // Verify token
+//     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+
+//     // Check if user still exists
+//     const user = await User.findOne({
+//       _id: decoded.id,
+//       securityId: decoded.securityId // HIPAA verification
+//     });
+
+//     if (!user) {
+//       return res.status(StatusCodes.UNAUTHORIZED).json({
+//         success: false,
+//         message: "User no longer exists"
+//       });
+//     }
+
+//     // // Check if token was invalidated
+//     // if (user.accessToken !== token) {
+//     //   return res.status(StatusCodes.UNAUTHORIZED).json({
+//     //     success: false,
+//     //     message: "Session expired"
+//     //   });
+//     // }
+
+//     // Change this check in authenticate middleware:
+//     if (user.accessToken && user.accessToken !== token) {
+//       return res.status(StatusCodes.UNAUTHORIZED).json({
+//         success: false,
+//         message: "Session expired"
+//       });
+//     }
+
+//     // HIPAA access log
+//     await SystemLog.create({
+//       action: "api_access",
+//       entityType: "User",
+//       entityId: user._id,
+//       metadata: {
+//         path: req.path,
+//         method: req.method
+//       }
+//     });
+
+//     req.user = user;
+//     next();
+//   } catch (err) {
+//     return res.status(StatusCodes.UNAUTHORIZED).json({
+//       success: false,
+//       message: "Not authorized to access this route"
+//     });
+//   }
+// };
+
+// export const authorize = (...roles) => {
+//   return (req, res, next) => {
+//     if (!roles.includes(req.user.role)) {
+//       return res.status(StatusCodes.FORBIDDEN).json({
+//         success: false,
+//         message: `Role (${req.user.role}) is not allowed`
+//       });
+//     }
+//     next();
+//   };
+// };
 
 
 // import jwt from "jsonwebtoken";

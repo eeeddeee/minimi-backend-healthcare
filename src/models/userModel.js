@@ -135,6 +135,15 @@ const userSchema = new mongoose.Schema(
       type: Date,
       default: Date.now
     },
+    isPayment: {
+  type: Boolean,
+  default: false,
+},
+subscription: {
+  subscriptionId: { type: String },
+  status: { type: String, enum: ["ACTIVE", "CANCELLED"], default: null },
+  currentPeriodEnd: { type: Date },
+},
     createdAt: {
       type: Date,
       default: Date.now,

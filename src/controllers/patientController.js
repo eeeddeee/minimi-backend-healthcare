@@ -81,22 +81,19 @@ export const getNursePatients = async (req, res) => {
   }
 };
 
+
 // export const getNursePatients = async (req, res) => {
 //   try {
 //     const { page = 1, limit = 10, isActive, search } = req.query;
 
 //     const nurseUserId = req.user?._id;
-//     console.log(nurseUserId, "Nurse ID")
-//     const nurse = await Nurse.findOne(
-//       { nurseUserId: new mongoose.Types.ObjectId(nurseUserId) },
-//       { _id: 1 }
-//     ).lean();
-
-//     if (!nurse) {
-//       return res.status(StatusCodes.NOT_FOUND).json({
-//         success: false,
-//         message: "Nurse profile not found for this user."
-//       });
+//     let nurseDocId = null;
+//     if (mongoose.Types.ObjectId.isValid(nurseUserId)) {
+//       const nurseDoc = await Nurse.findOne(
+//         { nurseUserId: new mongoose.Types.ObjectId(nurseUserId) },
+//         { _id: 1 }
+//       ).lean();
+//       nurseDocId = nurseDoc?._id || null;
 //     }
 
 //     const filters = {};
@@ -107,7 +104,7 @@ export const getNursePatients = async (req, res) => {
 //       filters,
 //       parseInt(page),
 //       parseInt(limit),
-//       nurse._id
+//       [nurseUserId, nurseDocId].filter(Boolean)
 //     );
 
 //     return res.success(
@@ -121,7 +118,6 @@ export const getNursePatients = async (req, res) => {
 //       .json({ success: false, message: error.message });
 //   }
 // };
-
 
 export const getPatient = async (req, res) => {
   try {

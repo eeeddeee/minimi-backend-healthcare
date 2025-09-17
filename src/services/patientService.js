@@ -233,14 +233,35 @@ export const getPatientsForNurse = async (
               }
             }
           ],
-          totalCount: [{ $count: "count" }]
+          totalCount: [{ $count: "count" }],
+          stats: [
+            {
+              $group: {
+                _id: null,
+                totalPatients: { $sum: 1 },
+                totalActivePatients: {
+                  $sum: { $cond: [{ $eq: ["$patientUser.isActive", true] }, 1, 0] }
+                },
+                totalInactivePatients: {
+                  $sum: { $cond: [{ $eq: ["$patientUser.isActive", false] }, 1, 0] }
+                }
+              }
+            }
+          ]
         }
       }
     ];
 
     const result = await Patient.aggregate(pipeline);
+
     const patients = result[0]?.data || [];
     const total = result[0]?.totalCount?.[0]?.count || 0;
+
+    const stats = result[0]?.stats?.[0] || {
+      totalPatients: 0,
+      totalActivePatients: 0,
+      totalInactivePatients: 0
+    };
 
     await SystemLog.create({
       action: "patients_viewed_by_nurse",
@@ -256,6 +277,7 @@ export const getPatientsForNurse = async (
 
     return {
       patients,
+      stats,
       pagination: {
         total,
         page,
@@ -270,6 +292,111 @@ export const getPatientsForNurse = async (
     };
   }
 };
+
+
+// export const getPatientsForNurse = async (
+//   query = {},
+//   page = 1,
+//   limit = 10,
+//   nurseIdsToMatch = []
+// ) => {
+//   try {
+//     const skip = (page - 1) * limit;
+
+//     const ids = (
+//       Array.isArray(nurseIdsToMatch) ? nurseIdsToMatch : [nurseIdsToMatch]
+//     )
+//       .filter(Boolean)
+//       .map((id) =>
+//         mongoose.Types.ObjectId.isValid(id)
+//           ? new mongoose.Types.ObjectId(id)
+//           : id
+//       );
+
+//     if (!ids.length) {
+//       throw { statusCode: 400, message: "Nurse id is required" };
+//     }
+
+//     const preMatchStage = { nurseIds: { $in: ids } };
+
+//     const matchStage = {};
+//     if (query.isActive !== undefined) {
+//       matchStage["patientUser.isActive"] = query.isActive === "true";
+//     }
+//     if (query.search) {
+//       const regex = new RegExp(query.search, "i");
+//       matchStage.$or = [
+//         { "patientUser.firstName": regex },
+//         { "patientUser.lastName": regex },
+//         { "patientUser.email": regex },
+//         { "patientUser.phone": regex }
+//       ];
+//     }
+
+//     const pipeline = [
+//       { $match: preMatchStage },
+//       {
+//         $lookup: {
+//           from: "users",
+//           localField: "patientUserId",
+//           foreignField: "_id",
+//           as: "patientUser"
+//         }
+//       },
+//       { $unwind: "$patientUser" },
+//       ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+//       {
+//         $facet: {
+//           data: [
+//             { $skip: skip },
+//             { $limit: limit },
+//             {
+//               $project: {
+//                 __v: 0,
+//                 "patientUser.passwordHash": 0,
+//                 "patientUser.__v": 0,
+//                 "patientUser.accessToken": 0,
+//                 "patientUser.refreshToken": 0
+//               }
+//             }
+//           ],
+//           totalCount: [{ $count: "count" }]
+//         }
+//       }
+//     ];
+
+//     const result = await Patient.aggregate(pipeline);
+//     const patients = result[0]?.data || [];
+//     const total = result[0]?.totalCount?.[0]?.count || 0;
+
+//     await SystemLog.create({
+//       action: "patients_viewed_by_nurse",
+//       entityType: "Patient",
+//       metadata: {
+//         page,
+//         limit,
+//         filters: query,
+//         nurseIds: ids,
+//         count: patients.length
+//       }
+//     });
+
+//     return {
+//       patients,
+//       pagination: {
+//         total,
+//         page,
+//         limit,
+//         totalPages: Math.ceil(total / limit)
+//       }
+//     };
+//   } catch (error) {
+//     throw {
+//       message: error.message || "Failed to fetch nurse patients",
+//       statusCode: error.statusCode || 500
+//     };
+//   }
+// };
 
 export const getPatientById = async (patientId) => {
   try {

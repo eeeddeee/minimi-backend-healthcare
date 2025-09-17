@@ -243,7 +243,8 @@ export const updateCaregiver = async (caregiverId, updates = {}, session) => {
     "caregiverShifts",
     "hourlyRate",
     "department",
-    "languagesSpoken"
+    "languagesSpoken",
+    "certification"
   ];
   const payload = {};
   for (const k of allowed)
