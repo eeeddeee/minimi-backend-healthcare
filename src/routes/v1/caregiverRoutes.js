@@ -38,7 +38,7 @@ router.post(
   "/get-nurse-caregivers",
   authenticate,
   authorize(["nurse"]),
-  caregiverController.getNurseCaregivers
+  caregiverController.getCaregiversForNurse
 );
 
 // router.put("/caregiver/:id", caregiverController.updateCaregiverProfile);
