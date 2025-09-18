@@ -23,6 +23,9 @@ const paymentSchema = new mongoose.Schema(
       type: String,
       default: "usd",
     },
+    cancellationNote: { type: String, default: null },
+    cancellationFeedback: { type: String, default: null },
+    cancelledAt: { type: Date, default: null },
     status: {
       type: String,
       enum: ["PENDING", "SUCCESS", "FAILED","CANCELLED"],

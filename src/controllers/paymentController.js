@@ -6,7 +6,8 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 import Payment from "../models/paymentModel.js";
 import User from "../models/userModel.js";
 
-const PRICE_ID = "price_1S8KTOE9a5VG73DdrDo6ddEG"; 
+
+const PRICE_ID = process.env.PRICE_ID; 
 
 export const proceedToCheckout = async (req, res) => {
   try {
@@ -132,10 +133,13 @@ export const onCompleteCheckout = async (req, res) => {
 export const cancelSubscription = async (req, res) => {
   try {
     const userId = req.user.id;
+    const { note, feedback } = req.body;
 
     const user = await User.findById(userId);
     if (!user || !user.subscription || !user.subscription.subscriptionId) {
-      return res.status(404).json({ status: 404, message: "User has no active subscription." });
+      return res
+        .status(404)
+        .json({ status: 404, message: "User has no active subscription." });
     }
 
     const subscriptionId = user.subscription.subscriptionId;
@@ -152,7 +156,12 @@ export const cancelSubscription = async (req, res) => {
 
     await Payment.findOneAndUpdate(
       { user: userId, subscriptionId },
-      { status: "CANCELLED" },
+      {
+        status: "CANCELLED",
+        cancellationNote: note || null,
+        cancellationFeedback: feedback || null,
+        cancelledAt: new Date(),
+      },
       { new: true }
     );
 
@@ -163,16 +172,26 @@ export const cancelSubscription = async (req, res) => {
     user.isPayment = false;
     await user.save();
 
-    res.status(200).json({
+    return res.status(200).json({
       status: 200,
       message: "Subscription successfully cancelled.",
-      data: canceled,
+      data: {
+        stripe: canceled,
+        note,
+        feedback,
+      },
     });
   } catch (error) {
     console.error("Cancel Error:", error);
-    res.status(500).json({ status: 500, message: "Failed to cancel subscription." });
+    return res.status(500).json({
+      status: 500,
+      message: "Failed to cancel subscription.",
+      error: error.message,
+    });
   }
 };
+
+
 
 export const getPaymentHistory = async (req, res) => {
   try {
