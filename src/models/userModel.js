@@ -11,24 +11,24 @@ const userSchema = new mongoose.Schema(
       unique: true,
       lowercase: true,
       required: true,
-      index: true
+      index: true,
     },
     passwordHash: {
       type: String,
       required: true,
-      select: false
+      select: false,
     },
     firstName: {
       type: String,
       required: true,
       trim: true,
-      maxlength: [50, "First name cannot exceed 50 characters"]
+      maxlength: [50, "First name cannot exceed 50 characters"],
     },
     lastName: {
       type: String,
       required: true,
       trim: true,
-      maxlength: [50, "Last name cannot exceed 50 characters"]
+      maxlength: [50, "Last name cannot exceed 50 characters"],
     },
     phone: {
       type: String,
@@ -38,7 +38,7 @@ const userSchema = new mongoose.Schema(
       //   },
       //   message: (props) => `${props.value} is not a valid phone number!`
       // },
-      required: true
+      required: true,
     },
     role: {
       type: String,
@@ -49,115 +49,116 @@ const userSchema = new mongoose.Schema(
         "nurse",
         "caregiver",
         "family",
-        "patient"
-      ]
+        "patient",
+      ],
     },
     isActive: {
       type: Boolean,
-      default: true
+      default: true,
     },
     languagePreference: {
       type: String,
       enum: ["en", "es", "hi", "bn", "ta", "zh"],
-      default: "en"
+      default: "en",
     },
     street: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     city: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     state: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     country: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     postalCode: {
       type: String,
       required: true,
-      trim: true
+      trim: true,
     },
     profile_image: {
-      type: String
+      type: String,
     },
     dateOfBirth: {
-      type: Date
+      type: Date,
     },
     gender: {
       type: String,
-      enum: ["male", "female", "other"]
+      enum: ["male", "female", "other"],
     },
     lastLogin: {
       type: Date,
-      default: null
+      default: null,
     },
     accessToken: {
       type: String,
-      select: false
+      select: false,
     },
     refreshToken: {
       type: String,
-      select: false
+      select: false,
     },
     // HIPAA Unique Identifier
     securityId: {
       type: String,
       default: uuidv4,
       unique: true,
-      immutable: true
+      immutable: true,
     },
     isPasswordChanged: { type: Boolean, default: false },
     reset_password_token: {
-      type: String
+      type: String,
     },
     reset_password_expiry: {
-      type: Date
+      type: Date,
     },
     // Socket.io related fields
     socketId: {
       type: String,
-      select: false
+      select: false,
     },
     online: {
       type: Boolean,
-      default: false
+      default: false,
     },
     lastSeen: {
       type: Date,
-      default: Date.now
+      default: Date.now,
     },
     isPayment: {
-  type: Boolean,
-  default: false,
-},
-subscription: {
-  subscriptionId: { type: String },
-  status: { type: String, enum: ["ACTIVE", "CANCELLED"], default: null },
-  currentPeriodEnd: { type: Date },
-},
+      type: Boolean,
+      default: false,
+    },
+    subscription: {
+      subscriptionId: { type: String },
+      status: { type: String, enum: ["ACTIVE", "CANCELLED"], default: null },
+      currentPeriodEnd: { type: Date },
+      dueDate: { type: Date },
+    },
     createdAt: {
       type: Date,
       default: Date.now,
-      immutable: true
+      immutable: true,
     },
     createdBy: {
-        type: mongoose.Schema.Types.ObjectId,
-        ref: "User",
-        // required: true
-      },
+      type: mongoose.Schema.Types.ObjectId,
+      ref: "User",
+      // required: true
+    },
     updatedAt: {
       type: Date,
-      default: Date.now
-    }
+      default: Date.now,
+    },
   },
   {
     toJSON: {
@@ -171,9 +172,9 @@ subscription: {
         delete ret.__v;
         ret.id = doc._id;
         return ret;
-      }
+      },
     },
-    toObject: { virtuals: true }
+    toObject: { virtuals: true },
   }
 );
 

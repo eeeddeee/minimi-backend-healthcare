@@ -9,7 +9,7 @@ import mongoose from "mongoose";
 
 export const getPatients = async (req, res) => {
   try {
-    const { page = 1, limit = 10, isActive, search } = req.query;
+    const { page, limit, isActive, search } = req.query;
 
     const hospitalId = req.user?._id;
     console.log(hospitalId,"Hospital ID")
@@ -46,7 +46,7 @@ export const getPatients = async (req, res) => {
 
 export const getNursePatients = async (req, res) => {
   try {
-    const { page = 1, limit = 10, isActive, search } = req.query;
+    const { page, limit, isActive, search } = req.query;
 
     const nurseUserId = req.user?._id;
     let nurseDocId = null;

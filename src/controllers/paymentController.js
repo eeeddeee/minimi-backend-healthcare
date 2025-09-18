@@ -6,13 +6,14 @@ const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 import Payment from "../models/paymentModel.js";
 import User from "../models/userModel.js";
 
-
-const PRICE_ID = process.env.PRICE_ID; 
+const PRICE_ID = process.env.PRICE_ID;
 
 export const proceedToCheckout = async (req, res) => {
   try {
     if (!req.user?.email) {
-      return res.status(400).json({ status: 400, message: "User email missing." });
+      return res
+        .status(400)
+        .json({ status: 400, message: "User email missing." });
     }
 
     const session = await stripe.checkout.sessions.create({
@@ -33,7 +34,7 @@ export const proceedToCheckout = async (req, res) => {
       status: "PENDING",
     });
 
- return res.success(
+    return res.success(
       "Proceeding to subscription checkout...",
       {
         redirectUrl: session.url,
@@ -52,13 +53,14 @@ export const proceedToCheckout = async (req, res) => {
   }
 };
 
-
 export const onCompleteCheckout = async (req, res) => {
   try {
     const { session_id } = req.query;
 
     if (!session_id) {
-      return res.status(400).json({ status: 400, message: "Session ID is required." });
+      return res
+        .status(400)
+        .json({ status: 400, message: "Session ID is required." });
     }
 
     const session = await stripe.checkout.sessions.retrieve(session_id, {
@@ -66,7 +68,9 @@ export const onCompleteCheckout = async (req, res) => {
     });
 
     if (session.payment_status !== "paid") {
-      return res.status(400).json({ status: 400, message: "Payment not completed successfully." });
+      return res
+        .status(400)
+        .json({ status: 400, message: "Payment not completed successfully." });
     }
 
     let subscription = session.subscription;
@@ -89,15 +93,15 @@ export const onCompleteCheckout = async (req, res) => {
         startDate: currentPeriodStart
           ? new Date(currentPeriodStart * 1000)
           : null,
-        dueDate: currentPeriodEnd
-          ? new Date(currentPeriodEnd * 1000)
-          : null,
+        dueDate: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
       },
       { new: true }
     );
 
     if (!payment) {
-      return res.status(404).json({ status: 404, message: "Payment record not found." });
+      return res
+        .status(404)
+        .json({ status: 404, message: "Payment record not found." });
     }
 
     const user = await User.findById(payment.user);
@@ -106,6 +110,7 @@ export const onCompleteCheckout = async (req, res) => {
       user.subscription = {
         subscriptionId: subscription.id,
         status: subscription.status.toUpperCase() || "ACTIVE",
+        dueDate: currentPeriodEnd ? new Date(currentPeriodEnd * 1000) : null,
         currentPeriodEnd: currentPeriodEnd
           ? new Date(currentPeriodEnd * 1000)
           : null,
@@ -113,12 +118,11 @@ export const onCompleteCheckout = async (req, res) => {
       await user.save();
     }
 
- return res.success(
+    return res.success(
       "Subscription successfully created.",
-      { session, subscription, payment },
+      { payment },
       StatusCodes.OK
     );
-
   } catch (error) {
     console.error("Complete Checkout Error:", error);
     return res
@@ -144,7 +148,9 @@ export const cancelSubscription = async (req, res) => {
 
     const subscriptionId = user.subscription.subscriptionId;
 
-    const subscription = await stripe.subscriptions.retrieve(subscriptionId).catch(() => null);
+    const subscription = await stripe.subscriptions
+      .retrieve(subscriptionId)
+      .catch(() => null);
     if (!subscription) {
       return res.status(404).json({
         status: 404,
@@ -166,9 +172,11 @@ export const cancelSubscription = async (req, res) => {
     );
 
     user.subscription.status = "CANCELLED";
-    user.subscription.currentPeriodEnd = canceled.current_period_end
-      ? new Date(canceled.current_period_end * 1000)
-      : new Date();
+    user.subscription.currentPeriodEnd = user.subscription.dueDate;
+    // user.subscription.currentPeriodEnd = canceled.current_period_end
+    //   ? new Date(canceled.current_period_end * 1000)
+    //   : new Date();
+    // user.subscription.dueDate;
     user.isPayment = false;
     await user.save();
 
@@ -191,14 +199,10 @@ export const cancelSubscription = async (req, res) => {
   }
 };
 
-
-
 export const getPaymentHistory = async (req, res) => {
   try {
     if (!req.user?._id) {
-      return res
-        .status(400)
-        .json({ status: 400, message: "User ID missing." });
+      return res.status(400).json({ status: 400, message: "User ID missing." });
     }
 
     const { page = 1, limit = 10 } = req.query;
@@ -246,7 +250,6 @@ export const getPaymentHistory = async (req, res) => {
       });
   }
 };
-
 
 // export const getPaymentHistory = async (req, res) => {
 //   try {

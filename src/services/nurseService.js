@@ -2,19 +2,12 @@ import Nurse from "../models/nurseModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import mongoose from "mongoose";
 
-
 export const createNurse = async (nurseData, createdBy, session) => {
   const nurse = await Nurse.create([{ ...nurseData, createdBy }], { session });
   return nurse[0].toObject();
 };
 
-
-export const getNurses = async (
-  query = {},
-  page = 1,
-  limit = 10,
-  hospitalId
-) => {
+export const getNurses = async (query = {}, page, limit, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
     const matchStage = {};
@@ -27,14 +20,35 @@ export const getNurses = async (
       matchStage["nurseUser.isActive"] = query.isActive === "true";
     }
 
-    // Search filter inside nurseUser
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "nurseUser.firstName": regex },
-        { "nurseUser.lastName": regex },
-        { "nurseUser.email": regex },
-        { "nurseUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: ["$nurseUser.firstName", " ", "$nurseUser.lastName"],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "nurseUser.firstName": exactRegex },
+        { "nurseUser.lastName": exactRegex },
+        { "nurseUser.fullName": exactRegex },
+        { "nurseUser.email": exactRegex },
+        { "nurseUser.phone": exactRegex },
+        { "nurseUser.firstName": partialRegex },
+        { "nurseUser.lastName": partialRegex },
+        { "nurseUser.fullName": partialRegex },
       ];
     }
 
@@ -44,30 +58,91 @@ export const getNurses = async (
           from: "users",
           localField: "nurseUserId",
           foreignField: "_id",
-          as: "nurseUser"
-        }
+          as: "nurseUser",
+        },
       },
       { $unwind: "$nurseUser" },
       { $match: matchStage },
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
                 "nurseUser.passwordHash": 0,
                 "nurseUser.__v": 0,
                 "nurseUser.accessToken": 0,
-                "nurseUser.refreshToken": 0
-              }
-            }
+                "nurseUser.refreshToken": 0,
+              },
+            },
           ],
-          totalCount: [{ $count: "count" }]
-        }
-      }
+          totalCount: [{ $count: "count" }],
+        },
+      },
     ];
+
+    // const aggregationPipeline = [
+    //   {
+    //     $lookup: {
+    //       from: "users",
+    //       localField: "nurseUserId",
+    //       foreignField: "_id",
+    //       as: "nurseUser",
+    //     },
+    //     b,
+    //   },
+    //   { $unwind: "$nurseUser" },
+    //   {
+    //     $addFields: {
+    //       "nurseUser.fullName": {
+    //         $concat: ["$nurseUser.firstName", " ", "$nurseUser.lastName"],
+    //       },
+    //     },
+    //   },
+    //   // Apply ALL filters (search + isActive + hospitalId)
+    //   {
+    //     $match: {
+    //       ...(hospitalId ? { "nurseUser.createdBy": hospitalId } : {}),
+    //       ...(query.isActive !== undefined
+    //         ? { "nurseUser.isActive": query.isActive === "true" }
+    //         : {}),
+    //       ...(query.search
+    //         ? {
+    //             $or: [
+    //               { "nurseUser.firstName": new RegExp(query.search, "i") },
+    //               { "nurseUser.lastName": new RegExp(query.search, "i") },
+    //               { "nurseUser.fullName": new RegExp(query.search, "i") },
+    //               { "nurseUser.email": new RegExp(query.search, "i") },
+    //               { "nurseUser.phone": new RegExp(query.search, "i") },
+    //             ],
+    //           }
+    //         : {}),
+    //     },
+    //   },
+    //   // Facet AFTER filters
+    //   {
+    //     $facet: {
+    //       data: [
+    //         ...(page && limit
+    //           ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+    //           : []),
+    //         {
+    //           $project: {
+    //             __v: 0,
+    //             "nurseUser.passwordHash": 0,
+    //             "nurseUser.__v": 0,
+    //             "nurseUser.accessToken": 0,
+    //             "nurseUser.refreshToken": 0,
+    //           },
+    //         },
+    //       ],
+    //       totalCount: [{ $count: "count" }],
+    //     },
+    //   },
+    // ];
 
     const result = await Nurse.aggregate(aggregationPipeline);
     const nurses = result[0].data;
@@ -80,8 +155,8 @@ export const getNurses = async (
         page,
         limit,
         filters: query,
-        count: nurses.length
-      }
+        count: nurses.length,
+      },
     });
 
     return {
@@ -90,18 +165,16 @@ export const getNurses = async (
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch nurses",
-      statusCode: 500
+      statusCode: 500,
     };
   }
 };
-
-
 
 export const getNurseById = async (nurseId) => {
   try {
@@ -109,28 +182,28 @@ export const getNurseById = async (nurseId) => {
       .select("-__v")
       .populate({
         path: "nurseUserId",
-        select: "-password -__v"
+        select: "-password -__v",
       })
       .lean();
 
     if (!nurse) {
       throw {
         message: "Nurse not found",
-        statusCode: 404
+        statusCode: 404,
       };
     }
 
     await SystemLog.create({
       action: "nurse_viewed",
       entityType: "Nurse",
-      entityId: nurseId
+      entityId: nurseId,
     });
 
     return { nurse };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch nurse",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -141,7 +214,7 @@ export const updateNurse = async (nurseId, updates = {}, session) => {
     "nurseShifts",
     "NurselicenseNumber",
     "specialization",
-    "yearsOfExperience"
+    "yearsOfExperience",
   ];
   const payload = {};
   for (const k of allowed)
@@ -164,8 +237,8 @@ export const updateNurse = async (nurseId, updates = {}, session) => {
         action: "nurse_updated",
         entityType: "Nurse",
         entityId: nurseId,
-        metadata: { fields: Object.keys(payload) }
-      }
+        metadata: { fields: Object.keys(payload) },
+      },
     ],
     { session }
   );

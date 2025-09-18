@@ -7,13 +7,13 @@ import mongoose from "mongoose";
 export const createFamilyMember = async (familyData, createdBy, session) => {
   const existingRelationship = await FamilyMember.findOne({
     patient: familyData.patientId,
-    familyMemberUserId: familyData.familyMemberUserId
+    familyMemberUserId: familyData.familyMemberUserId,
   }).session(session);
 
   if (existingRelationship) {
     throw {
       statusCode: StatusCodes.CONFLICT,
-      message: "This family relationship already exists"
+      message: "This family relationship already exists",
     };
   }
 
@@ -23,20 +23,19 @@ export const createFamilyMember = async (familyData, createdBy, session) => {
     relationship: familyData.relationship,
     canMakeAppointments: familyData.canMakeAppointments,
     canAccessMedicalRecords: familyData.canAccessMedicalRecords,
-    createdBy
+    createdBy,
   };
   // console.log("Data going to FamilyMember.create:", familyMemberData);
 
   const familyMember = await FamilyMember.create([familyMemberData], {
-    session
+    session,
   });
   // console.log(familyMember, "family service");
 
   return familyMember[0].toObject();
 };
 
-
-export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospitalId) => {
+export const getFamilyMembers = async (query = {}, page, limit, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
 
@@ -44,15 +43,47 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
     if (query.isActive !== undefined) {
       matchStage["familyUser.isActive"] = query.isActive === "true";
     }
+
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "familyUser.firstName": regex },
-        { "familyUser.lastName": regex },
-        { "familyUser.email": regex },
-        { "familyUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: ["$familyUser.firstName", " ", "$familyUser.lastName"],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "familyUser.firstName": exactRegex },
+        { "familyUser.lastName": exactRegex },
+        { "familyUser.fullName": exactRegex },
+        { "familyUser.email": exactRegex },
+        { "familyUser.phone": exactRegex },
+        { "familyUser.firstName": partialRegex },
+        { "familyUser.lastName": partialRegex },
+        { "familyUser.fullName": partialRegex },
       ];
     }
+    // if (query.search) {
+    //   const regex = new RegExp(query.search, "i");
+    //   matchStage.$or = [
+    //     { "familyUser.firstName": regex },
+    //     { "familyUser.lastName": regex },
+    //     { "familyUser.email": regex },
+    //     { "familyUser.phone": regex }
+    //   ];
+    // }
 
     let hospObjId = null;
     if (hospitalId) {
@@ -67,8 +98,8 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
           from: "users",
           localField: "familyMemberUserId",
           foreignField: "_id",
-          as: "familyUser"
-        }
+          as: "familyUser",
+        },
       },
       { $unwind: "$familyUser" },
 
@@ -77,8 +108,8 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
           from: "patients",
           localField: "patientId",
           foreignField: "_id",
-          as: "patient"
-        }
+          as: "patient",
+        },
       },
       { $unwind: { path: "$patient", preserveNullAndEmptyArrays: true } },
 
@@ -89,8 +120,8 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
           from: "users",
           localField: "patient.patientUserId",
           foreignField: "_id",
-          as: "patientUser"
-        }
+          as: "patientUser",
+        },
       },
       { $unwind: { path: "$patientUser", preserveNullAndEmptyArrays: true } },
 
@@ -99,8 +130,9 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
@@ -112,13 +144,13 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
                 "patientUser.passwordHash": 0,
                 "patientUser.__v": 0,
                 "patientUser.accessToken": 0,
-                "patientUser.refreshToken": 0
-              }
-            }
+                "patientUser.refreshToken": 0,
+              },
+            },
           ],
-          totalCount: [{ $count: "count" }]
-        }
-      }
+          totalCount: [{ $count: "count" }],
+        },
+      },
     ];
 
     const result = await FamilyMember.aggregate(aggregationPipeline);
@@ -134,8 +166,8 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
         limit,
         filters: query,
         hospitalId: hospitalId || null,
-        count: familyMembers.length
-      }
+        count: familyMembers.length,
+      },
     });
 
     return {
@@ -144,13 +176,13 @@ export const getFamilyMembers = async (query = {}, page = 1, limit = 10, hospita
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch family members",
-      statusCode: 500
+      statusCode: 500,
     };
   }
 };
@@ -162,28 +194,28 @@ export const getFamilyMemberById = async (familyMemberId) => {
       .select("-__v")
       .populate({
         path: "familyMemberUserId",
-        select: "-password -__v"
+        select: "-password -__v",
       })
       .lean();
 
     if (!familyMember) {
       throw {
         message: "Family Member not found",
-        statusCode: 404
+        statusCode: 404,
       };
     }
 
     await SystemLog.create({
       action: "family_member_viewed",
       entityType: "FamilyMember",
-      entityId: familyMemberId
+      entityId: familyMemberId,
     });
 
     return { familyMember };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch family member",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -196,7 +228,7 @@ export const updateFamilyMember = async (
   const allowed = [
     "relationship",
     "canMakeAppointments",
-    "canAccessMedicalRecords"
+    "canAccessMedicalRecords",
   ];
   const payload = {};
   for (const k of allowed)
@@ -213,7 +245,7 @@ export const updateFamilyMember = async (
   if (!familyMember)
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Family Member not found"
+      message: "Family Member not found",
     };
 
   await SystemLog.create(
@@ -222,15 +254,14 @@ export const updateFamilyMember = async (
         action: "family_member_updated",
         entityType: "FamilyMember",
         entityId: familyMemberId,
-        metadata: { fields: Object.keys(payload) }
-      }
+        metadata: { fields: Object.keys(payload) },
+      },
     ],
     { session }
   );
 
   return familyMember;
 };
-
 
 // export const getFamilyMembersByPatient = async (patientId, session = null) => {
 //   const query = FamilyMember.find({ patient: patientId }).populate("user");

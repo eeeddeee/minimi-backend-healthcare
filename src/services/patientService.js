@@ -5,12 +5,11 @@ import mongoose from "mongoose";
 
 export const createPatient = async (patientData, createdBy, session) => {
   const patient = await Patient.create([{ ...patientData, createdBy }], {
-    session
+    session,
   });
   console.log("CREATE PATIENT DATA: ", patientData);
   return patient[0].toObject();
 };
-
 
 export const addFamilyMember = async (
   patientId,
@@ -27,13 +26,12 @@ export const addFamilyMember = async (
   if (!patient) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Patient not found"
+      message: "Patient not found",
     };
   }
 
   return patient;
 };
-
 
 export const getAndVerifyPatientByHospital = async (
   patientId,
@@ -60,18 +58,13 @@ export const getAndVerifyPatientByHospital = async (
     );
     throw {
       statusCode: StatusCodes.FORBIDDEN,
-      message: "Patient not found or not in your hospital"
+      message: "Patient not found or not in your hospital",
     };
   }
   return patient;
 };
 
-export const getPatients = async (
-  query = {},
-  page = 1,
-  limit = 10,
-  hospitalId
-) => {
+export const getPatients = async (query = {}, page, limit, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
 
@@ -90,14 +83,50 @@ export const getPatients = async (
     }
 
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "patientUser.firstName": regex },
-        { "patientUser.lastName": regex },
-        { "patientUser.email": regex },
-        { "patientUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: [
+                  "$patientUser.firstName",
+                  " ",
+                  "$patientUser.lastName",
+                ],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "patientUser.firstName": exactRegex },
+        { "patientUser.lastName": exactRegex },
+        { "patientUser.fullName": exactRegex },
+        { "patientUser.email": exactRegex },
+        { "patientUser.phone": exactRegex },
+        { "patientUser.firstName": partialRegex },
+        { "patientUser.lastName": partialRegex },
+        { "patientUser.fullName": partialRegex },
       ];
     }
+
+    // if (query.search) {
+    //   const regex = new RegExp(query.search, "i");
+    //   matchStage.$or = [
+    //     { "patientUser.firstName": regex },
+    //     { "patientUser.lastName": regex },
+    //     { "patientUser.email": regex },
+    //     { "patientUser.phone": regex }
+    //   ];
+    // }
 
     const aggregationPipeline = [
       ...(hospitalId ? [{ $match: preMatchStage }] : []),
@@ -107,8 +136,8 @@ export const getPatients = async (
           from: "users",
           localField: "patientUserId",
           foreignField: "_id",
-          as: "patientUser"
-        }
+          as: "patientUser",
+        },
       },
       { $unwind: "$patientUser" },
 
@@ -117,21 +146,22 @@ export const getPatients = async (
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
                 "patientUser.passwordHash": 0,
                 "patientUser.__v": 0,
                 "patientUser.accessToken": 0,
-                "patientUser.refreshToken": 0
-              }
-            }
+                "patientUser.refreshToken": 0,
+              },
+            },
           ],
-          totalCount: [{ $count: "count" }]
-        }
-      }
+          totalCount: [{ $count: "count" }],
+        },
+      },
     ];
 
     const result = await Patient.aggregate(aggregationPipeline);
@@ -146,8 +176,8 @@ export const getPatients = async (
         limit,
         filters: query,
         hospitalId: hospitalId || null,
-        count: patients.length
-      }
+        count: patients.length,
+      },
     });
 
     return {
@@ -156,21 +186,21 @@ export const getPatients = async (
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch patients",
-      statusCode: 500
+      statusCode: 500,
     };
   }
 };
 
 export const getPatientsForNurse = async (
   query = {},
-  page = 1,
-  limit = 10,
+  page,
+  limit,
   nurseIdsToMatch = []
 ) => {
   try {
@@ -196,15 +226,52 @@ export const getPatientsForNurse = async (
     if (query.isActive !== undefined) {
       matchStage["patientUser.isActive"] = query.isActive === "true";
     }
+
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "patientUser.firstName": regex },
-        { "patientUser.lastName": regex },
-        { "patientUser.email": regex },
-        { "patientUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: [
+                  "$patientUser.firstName",
+                  " ",
+                  "$patientUser.lastName",
+                ],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "patientUser.firstName": exactRegex },
+        { "patientUser.lastName": exactRegex },
+        { "patientUser.fullName": exactRegex },
+        { "patientUser.email": exactRegex },
+        { "patientUser.phone": exactRegex },
+        { "patientUser.firstName": partialRegex },
+        { "patientUser.lastName": partialRegex },
+        { "patientUser.fullName": partialRegex },
       ];
     }
+
+    // if (query.search) {
+    //   const regex = new RegExp(query.search, "i");
+    //   matchStage.$or = [
+    //     { "patientUser.firstName": regex },
+    //     { "patientUser.lastName": regex },
+    //     { "patientUser.email": regex },
+    //     { "patientUser.phone": regex },
+    //   ];
+    // }
 
     const pipeline = [
       { $match: preMatchStage },
@@ -213,25 +280,26 @@ export const getPatientsForNurse = async (
           from: "users",
           localField: "patientUserId",
           foreignField: "_id",
-          as: "patientUser"
-        }
+          as: "patientUser",
+        },
       },
       { $unwind: "$patientUser" },
       ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
                 "patientUser.passwordHash": 0,
                 "patientUser.__v": 0,
                 "patientUser.accessToken": 0,
-                "patientUser.refreshToken": 0
-              }
-            }
+                "patientUser.refreshToken": 0,
+              },
+            },
           ],
           totalCount: [{ $count: "count" }],
           stats: [
@@ -240,16 +308,20 @@ export const getPatientsForNurse = async (
                 _id: null,
                 totalPatients: { $sum: 1 },
                 totalActivePatients: {
-                  $sum: { $cond: [{ $eq: ["$patientUser.isActive", true] }, 1, 0] }
+                  $sum: {
+                    $cond: [{ $eq: ["$patientUser.isActive", true] }, 1, 0],
+                  },
                 },
                 totalInactivePatients: {
-                  $sum: { $cond: [{ $eq: ["$patientUser.isActive", false] }, 1, 0] }
-                }
-              }
-            }
-          ]
-        }
-      }
+                  $sum: {
+                    $cond: [{ $eq: ["$patientUser.isActive", false] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
     ];
 
     const result = await Patient.aggregate(pipeline);
@@ -260,7 +332,7 @@ export const getPatientsForNurse = async (
     const stats = result[0]?.stats?.[0] || {
       totalPatients: 0,
       totalActivePatients: 0,
-      totalInactivePatients: 0
+      totalInactivePatients: 0,
     };
 
     await SystemLog.create({
@@ -271,8 +343,8 @@ export const getPatientsForNurse = async (
         limit,
         filters: query,
         nurseIds: ids,
-        count: patients.length
-      }
+        count: patients.length,
+      },
     });
 
     return {
@@ -282,17 +354,16 @@ export const getPatientsForNurse = async (
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch nurse patients",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
-
 
 // export const getPatientsForNurse = async (
 //   query = {},
@@ -404,28 +475,28 @@ export const getPatientById = async (patientId) => {
       .select("-__v")
       .populate({
         path: "patientUserId",
-        select: "-password -__v"
+        select: "-password -__v",
       })
       .lean();
 
     if (!patient) {
       throw {
         message: "Patient not found",
-        statusCode: 404
+        statusCode: 404,
       };
     }
 
     await SystemLog.create({
       action: "patient_viewed",
       entityType: "Patient",
-      entityId: patientId
+      entityId: patientId,
     });
 
     return { patient };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch patient",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -440,7 +511,7 @@ export const updatePatient = async (patientId, updates = {}, session) => {
     "emergencyContacts",
     "insurance",
     "status",
-    "currentMedications"
+    "currentMedications",
   ];
   const payload = {};
   for (const k of allowed)
@@ -463,12 +534,11 @@ export const updatePatient = async (patientId, updates = {}, session) => {
         action: "patient_updated",
         entityType: "Patient",
         entityId: patientId,
-        metadata: { fields: Object.keys(payload) }
-      }
+        metadata: { fields: Object.keys(payload) },
+      },
     ],
     { session }
   );
 
   return patient;
 };
-

@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 // GET ALL
 export const getFamilyMembers = async (req, res) => {
   try {
-    const { page = 1, limit = 10, isActive, search } = req.query;
+    const { page, limit, isActive, search } = req.query;
 
     const hospitalId = req.user?._id;
 

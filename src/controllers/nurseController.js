@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 
 export const getNurses = async (req, res) => {
   try {
-    const { page = 1, limit = 10, search, isActive } = req.query;
+    const { page, limit, search, isActive } = req.query;
     const hospitalId = req.user?._id;
 
     const filters = {

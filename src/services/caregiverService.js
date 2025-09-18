@@ -6,12 +6,12 @@ import mongoose from "mongoose";
 
 export const createCaregiver = async (caregiverData, createdBy, session) => {
   const caregiver = await Caregiver.create([{ ...caregiverData, createdBy }], {
-    session
+    session,
   });
   return caregiver[0].toObject();
 };
 
-export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId) => {
+export const getCaregivers = async (query = {}, page, limit, hospitalId) => {
   try {
     const skip = (page - 1) * limit;
 
@@ -29,15 +29,52 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
     if (query.isActive !== undefined) {
       matchStage["caregiverUser.isActive"] = query.isActive === "true";
     }
+
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "caregiverUser.firstName": regex },
-        { "caregiverUser.lastName": regex },
-        { "caregiverUser.email": regex },
-        { "caregiverUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: [
+                  "$caregiverUser.firstName",
+                  " ",
+                  "$caregiverUser.lastName",
+                ],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "caregiverUser.firstName": exactRegex },
+        { "caregiverUser.lastName": exactRegex },
+        { "caregiverUser.fullName": exactRegex },
+        { "caregiverUser.email": exactRegex },
+        { "caregiverUser.phone": exactRegex },
+        { "caregiverUser.firstName": partialRegex },
+        { "caregiverUser.lastName": partialRegex },
+        { "caregiverUser.fullName": partialRegex },
       ];
     }
+
+    // if (query.search) {
+    //   const regex = new RegExp(query.search, "i");
+    //   matchStage.$or = [
+    //     { "caregiverUser.firstName": regex },
+    //     { "caregiverUser.lastName": regex },
+    //     { "caregiverUser.email": regex },
+    //     { "caregiverUser.phone": regex }
+    //   ];
+    // }
 
     const aggregationPipeline = [
       ...(hospitalId ? [{ $match: preMatchStage }] : []),
@@ -47,8 +84,8 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
           from: "users",
           localField: "caregiverUserId",
           foreignField: "_id",
-          as: "caregiverUser"
-        }
+          as: "caregiverUser",
+        },
       },
       { $unwind: "$caregiverUser" },
 
@@ -57,21 +94,22 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
                 "caregiverUser.passwordHash": 0,
                 "caregiverUser.__v": 0,
                 "caregiverUser.accessToken": 0,
-                "caregiverUser.refreshToken": 0
-              }
-            }
+                "caregiverUser.refreshToken": 0,
+              },
+            },
           ],
-          totalCount: [{ $count: "count" }]
-        }
-      }
+          totalCount: [{ $count: "count" }],
+        },
+      },
     ];
 
     const result = await Caregiver.aggregate(aggregationPipeline);
@@ -86,8 +124,8 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
         limit,
         filters: query,
         hospitalId: hospitalId || null,
-        count: caregivers.length
-      }
+        count: caregivers.length,
+      },
     });
 
     return {
@@ -96,30 +134,34 @@ export const getCaregivers = async (query = {}, page = 1, limit = 10, hospitalId
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
-      }
+        totalPages: Math.ceil(total / limit),
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch caregivers",
-      statusCode: 500
+      statusCode: 500,
     };
   }
 };
 
 export const getCaregiversForNurse = async (
   query = {},
-  page = 1,
-  limit = 10,
+  page,
+  limit,
   nurseIdsToMatch = []
 ) => {
   try {
     const skip = (page - 1) * limit;
 
-    const ids = (Array.isArray(nurseIdsToMatch) ? nurseIdsToMatch : [nurseIdsToMatch])
+    const ids = (
+      Array.isArray(nurseIdsToMatch) ? nurseIdsToMatch : [nurseIdsToMatch]
+    )
       .filter(Boolean)
-      .map(id =>
-        mongoose.Types.ObjectId.isValid(id) ? new mongoose.Types.ObjectId(id) : id
+      .map((id) =>
+        mongoose.Types.ObjectId.isValid(id)
+          ? new mongoose.Types.ObjectId(id)
+          : id
       );
 
     if (!ids.length) {
@@ -132,15 +174,52 @@ export const getCaregiversForNurse = async (
     if (query.isActive !== undefined) {
       matchStage["caregiverUser.isActive"] = query.isActive === "true";
     }
+
     if (query.search) {
-      const regex = new RegExp(query.search, "i");
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+
+      const partialRegex = new RegExp(searchTerm, "i");
+
       matchStage.$or = [
-        { "caregiverUser.firstName": regex },
-        { "caregiverUser.lastName": regex },
-        { "caregiverUser.email": regex },
-        { "caregiverUser.phone": regex }
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: [
+                  "$caregiverUser.firstName",
+                  " ",
+                  "$caregiverUser.lastName",
+                ],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "caregiverUser.firstName": exactRegex },
+        { "caregiverUser.lastName": exactRegex },
+        { "caregiverUser.fullName": exactRegex },
+        { "caregiverUser.email": exactRegex },
+        { "caregiverUser.phone": exactRegex },
+        { "caregiverUser.firstName": partialRegex },
+        { "caregiverUser.lastName": partialRegex },
+        { "caregiverUser.fullName": partialRegex },
       ];
     }
+
+    // if (query.search) {
+    //   const regex = new RegExp(query.search, "i");
+    //   matchStage.$or = [
+    //     { "caregiverUser.firstName": regex },
+    //     { "caregiverUser.lastName": regex },
+    //     { "caregiverUser.email": regex },
+    //     { "caregiverUser.phone": regex },
+    //   ];
+    // }
 
     const pipeline = [
       { $match: preMatchStage },
@@ -149,37 +228,38 @@ export const getCaregiversForNurse = async (
           from: "users",
           localField: "caregiverUserId",
           foreignField: "_id",
-          as: "caregiverUser"
-        }
+          as: "caregiverUser",
+        },
       },
       { $unwind: "$caregiverUser" },
       ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
       {
         $facet: {
           data: [
-            { $skip: skip },
-            { $limit: limit },
+            ...(page && limit
+              ? [{ $skip: (page - 1) * limit }, { $limit: limit }]
+              : []),
             {
               $project: {
                 __v: 0,
                 "caregiverUser.passwordHash": 0,
                 "caregiverUser.__v": 0,
                 "caregiverUser.accessToken": 0,
-                "caregiverUser.refreshToken": 0
-              }
-            }
+                "caregiverUser.refreshToken": 0,
+              },
+            },
           ],
           totalCount: [{ $count: "count" }],
           statusCounts: [
             {
               $group: {
                 _id: "$caregiverUser.isActive",
-                count: { $sum: 1 }
-              }
-            }
-          ]
-        }
-      }
+                count: { $sum: 1 },
+              },
+            },
+          ],
+        },
+      },
     ];
 
     const result = await Caregiver.aggregate(pipeline);
@@ -188,7 +268,7 @@ export const getCaregiversForNurse = async (
 
     let activeCount = 0;
     let inactiveCount = 0;
-    result[0]?.statusCounts?.forEach(item => {
+    result[0]?.statusCounts?.forEach((item) => {
       if (item._id === true) activeCount = item.count;
       if (item._id === false) inactiveCount = item.count;
     });
@@ -201,8 +281,8 @@ export const getCaregiversForNurse = async (
         limit,
         filters: query,
         nurseIds: ids,
-        count: caregivers.length
-      }
+        count: caregivers.length,
+      },
     });
 
     return {
@@ -211,18 +291,18 @@ export const getCaregiversForNurse = async (
         total,
         page,
         limit,
-        totalPages: Math.ceil(total / limit)
+        totalPages: Math.ceil(total / limit),
       },
       stats: {
         totalCaregivers: total,
         activeCaregivers: activeCount,
-        inactiveCaregivers: inactiveCount
-      }
+        inactiveCaregivers: inactiveCount,
+      },
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch nurse caregivers",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -322,7 +402,6 @@ export const getCaregiversForNurse = async (
 //   }
 // };
 
-
 // GET Caregiver by ID
 export const getCaregiverById = async (caregiverId) => {
   try {
@@ -330,28 +409,28 @@ export const getCaregiverById = async (caregiverId) => {
       .select("-__v")
       .populate({
         path: "caregiverUserId", // <-- change this if your field is different
-        select: "-password -__v"
+        select: "-password -__v",
       })
       .lean();
 
     if (!caregiver) {
       throw {
         message: "Caregiver not found",
-        statusCode: 404
+        statusCode: 404,
       };
     }
 
     await SystemLog.create({
       action: "caregiver_viewed",
       entityType: "Caregiver",
-      entityId: caregiverId
+      entityId: caregiverId,
     });
 
     return { caregiver };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch caregiver",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -364,7 +443,7 @@ export const updateCaregiver = async (caregiverId, updates = {}, session) => {
     "hourlyRate",
     "department",
     "languagesSpoken",
-    "certification"
+    "certification",
   ];
   const payload = {};
   for (const k of allowed)
@@ -387,8 +466,8 @@ export const updateCaregiver = async (caregiverId, updates = {}, session) => {
         action: "caregiver_updated",
         entityType: "Caregiver",
         entityId: caregiverId,
-        metadata: { fields: Object.keys(payload) }
-      }
+        metadata: { fields: Object.keys(payload) },
+      },
     ],
     { session }
   );
@@ -416,7 +495,7 @@ export const addPatientToCaregiver = async (
   if (!caregiver) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Caregiver not found"
+      message: "Caregiver not found",
     };
   }
 
@@ -425,7 +504,7 @@ export const addPatientToCaregiver = async (
   if (!patient) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Patient not found"
+      message: "Patient not found",
     };
   }
 

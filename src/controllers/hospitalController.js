@@ -7,7 +7,7 @@ import mongoose from "mongoose";
 
 export const getHospitals = async (req, res) => {
   try {
-    const { page = 1, limit = 10, isActive, search } = req.query;
+    const { page, limit, isActive, search } = req.query;
 
     const filters = {};
     if (isActive !== undefined) {
