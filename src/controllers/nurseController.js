@@ -4,10 +4,9 @@ import * as userService from "../services/userService.js";
 import { StatusCodes } from "http-status-codes";
 import mongoose from "mongoose";
 
-
 export const getNurses = async (req, res) => {
   try {
-    const { page, limit, search, isActive } = req.query;
+    const { page, limit, search, isActive,lang } = req.query;
     const hospitalId = req.user?._id;
 
     const filters = {
@@ -19,7 +18,8 @@ export const getNurses = async (req, res) => {
       filters,
       parseInt(page),
       parseInt(limit),
-      hospitalId
+      hospitalId,
+      lang
     );
 
     return res.success("Nurses fetched successfully.", result, StatusCodes.OK);
