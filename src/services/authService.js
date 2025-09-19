@@ -19,7 +19,7 @@ export const loginUser = async (email, password, ipAddress, userAgent) => {
     console.log("User not found:", email);
     throw {
       message: "Invalid credentials",
-      statusCode: StatusCodes.UNAUTHORIZED
+      statusCode: StatusCodes.UNAUTHORIZED,
     };
   }
 
@@ -28,7 +28,7 @@ export const loginUser = async (email, password, ipAddress, userAgent) => {
     console.log("User is disabled:", email);
     throw {
       message: "Account disabled",
-      statusCode: StatusCodes.FORBIDDEN
+      statusCode: StatusCodes.FORBIDDEN,
     };
   }
 
@@ -41,7 +41,7 @@ export const loginUser = async (email, password, ipAddress, userAgent) => {
     console.log("Invalid password for user:", email);
     throw {
       message: "Invalid credentials",
-      statusCode: StatusCodes.UNAUTHORIZED
+      statusCode: StatusCodes.UNAUTHORIZED,
     };
   }
 
@@ -59,8 +59,8 @@ export const loginUser = async (email, password, ipAddress, userAgent) => {
     entityId: user._id,
     metadata: {
       ip: ipAddress,
-      device: userAgent
-    }
+      device: userAgent,
+    },
   });
 
   // Update last login and token for the user
@@ -71,7 +71,7 @@ export const loginUser = async (email, password, ipAddress, userAgent) => {
   // Return token and user data
   return {
     token,
-    user
+    user,
     // {
     //   id: user._id,
     //   email: user.email,
@@ -96,7 +96,7 @@ export const forgotPassword = async (email) => {
   user.reset_password_expiry = resetTokenExpiry;
   await user.save();
 
-  const resetUrl = `https://localhost:5173/reset-password?token=${resetToken}`;
+  const resetUrl = `https://minimi-healthcare.onrender.com/reset-password?token=${resetToken}`;
 
   const html = resetPasswordTemplate(resetUrl);
 
@@ -104,7 +104,7 @@ export const forgotPassword = async (email) => {
     await sendEmail({
       to: email,
       subject: "Password Reset Link",
-      html
+      html,
     });
   } catch (mailError) {
     user.reset_password_token = null;
@@ -119,26 +119,26 @@ export const forgotPassword = async (email) => {
   return {
     email: user.email,
     resetLinkSent: true,
-    expiresAt: new Date(resetTokenExpiry)
+    expiresAt: new Date(resetTokenExpiry),
   };
 };
 
 export const resetPassword = async (token, newPassword) => {
   const user = await User.findOne({
     reset_password_token: token,
-    reset_password_expiry: { $gt: Date.now() }
+    reset_password_expiry: { $gt: Date.now() },
   }).select("+passwordHash");
   if (!user) {
     throw {
       message: "Invalid or expired token",
-      statusCode: StatusCodes.BAD_REQUEST
+      statusCode: StatusCodes.BAD_REQUEST,
     };
   }
 
   if (newPassword.length < 8) {
     throw {
       message: "Password must be at least 8 characters",
-      statusCode: StatusCodes.BAD_REQUEST
+      statusCode: StatusCodes.BAD_REQUEST,
     };
   }
 
@@ -153,7 +153,7 @@ export const resetPassword = async (token, newPassword) => {
   await SystemLog.create({
     action: "password_reset",
     entityType: "User",
-    entityId: user._id
+    entityId: user._id,
   });
 
   return user;
@@ -167,7 +167,7 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   if (!(await bcrypt.compare(currentPassword, user.passwordHash))) {
     throw {
       message: "Current password is incorrect",
-      statusCode: StatusCodes.UNAUTHORIZED
+      statusCode: StatusCodes.UNAUTHORIZED,
     };
   }
 
@@ -189,13 +189,13 @@ export const changePassword = async (userId, currentPassword, newPassword) => {
   await SystemLog.create({
     action: "password_changed",
     entityType: "User",
-    entityId: user._id
+    entityId: user._id,
   });
 
   return {
     success: true,
     message: "Password changed successfully",
-    token: newToken
+    token: newToken,
   };
 };
 
@@ -206,8 +206,8 @@ export const logoutUser = async (userId) => {
       $set: {
         accessToken: null,
         refreshToken: null,
-        updatedAt: Date.now()
-      }
+        updatedAt: Date.now(),
+      },
     },
     { new: true }
   );
@@ -215,7 +215,7 @@ export const logoutUser = async (userId) => {
   if (!user) {
     throw {
       message: "User not found",
-      statusCode: StatusCodes.NOT_FOUND
+      statusCode: StatusCodes.NOT_FOUND,
     };
   }
 
@@ -223,7 +223,7 @@ export const logoutUser = async (userId) => {
   await SystemLog.create({
     action: "user_logout",
     entityType: "User",
-    entityId: user._id
+    entityId: user._id,
   });
 
   return { success: true, message: "Logged out successfully" };
