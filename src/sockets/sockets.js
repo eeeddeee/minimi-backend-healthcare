@@ -34,17 +34,18 @@ export const initSocket = (httpServer) => {
     ? process.env.SOCKET_CORS_ORIGINS.split(",").map((s) => s.trim())
     : [
         "*",
+        "https://minimi-healthcare.onrender.com",
         "http://localhost:5173",
-        "https://minimi-frontend-healthcare.vercel.app"
+        "https://minimi-frontend-healthcare.vercel.app",
       ];
 
   io = new Server(httpServer, {
     cors: {
       origin: origins,
       methods: ["GET", "POST"],
-      credentials: true
+      credentials: true,
     },
-    path: process.env.SOCKET_PATH || "/socket.io"
+    path: process.env.SOCKET_PATH || "/socket.io",
   });
 
   io.use((socket, next) => {
@@ -74,7 +75,7 @@ export const initSocket = (httpServer) => {
         {
           socketId: socket.id,
           online: true,
-          lastSeen: new Date()
+          lastSeen: new Date(),
         },
         { new: true }
       );
@@ -119,7 +120,7 @@ export const initSocket = (httpServer) => {
             content || (attachments.length ? "(attachment)" : "(no content)"),
           attachments,
           isRead: false,
-          createdAt: new Date()
+          createdAt: new Date(),
         };
 
         // ✅ EMIT TO CONVERSATION ROOM (frontend will handle display)
@@ -158,7 +159,7 @@ export const initSocket = (httpServer) => {
           {
             conversationId,
             receiverId: userId,
-            isRead: false
+            isRead: false,
           },
           { $set: { isRead: true } }
         );
@@ -167,7 +168,7 @@ export const initSocket = (httpServer) => {
         socket.to(`conversation:${conversationId}`).emit("conversation-read", {
           conversationId,
           userId,
-          readAt: new Date()
+          readAt: new Date(),
         });
       } catch (error) {
         console.error("Error marking conversation read:", error);
@@ -203,7 +204,7 @@ export const initSocket = (httpServer) => {
         if (!alreadyDeleted) {
           message.deletedBy.push({
             userId: userId,
-            deletedAt: new Date()
+            deletedAt: new Date(),
           });
 
           const participantIds = conversation.participants.map((p) =>
@@ -226,7 +227,7 @@ export const initSocket = (httpServer) => {
           messageId,
           conversationId,
           deletedBy: userId,
-          updatedMessage
+          updatedMessage,
         });
       } catch (error) {
         console.error("Error deleting message:", error);
@@ -256,7 +257,7 @@ export const initSocket = (httpServer) => {
       socket.to(`conversation:${conversationId}`).emit("user-typing", {
         userId,
         conversationId,
-        typing: true
+        typing: true,
       });
     });
 
@@ -265,7 +266,7 @@ export const initSocket = (httpServer) => {
       socket.to(`conversation:${conversationId}`).emit("user-typing", {
         userId,
         conversationId,
-        typing: false
+        typing: false,
       });
     });
 
@@ -277,7 +278,7 @@ export const initSocket = (httpServer) => {
         // Update user offline status
         await User.findByIdAndUpdate(userId, {
           online: false,
-          lastSeen: new Date()
+          lastSeen: new Date(),
         });
 
         // Broadcast user offline status
@@ -292,7 +293,7 @@ export const initSocket = (httpServer) => {
       try {
         await User.findByIdAndUpdate(userId, {
           online: false,
-          lastSeen: new Date()
+          lastSeen: new Date(),
         });
         socket.broadcast.emit("user-offline", { userId, online: false });
         socket.disconnect();
@@ -328,14 +329,10 @@ export const emitToConversation = (conversationId, event, payload) => {
 
 export const emitToUsers = (userIds = [], event, payload) => {
   if (!io || !userIds.length) return;
-  userIds.forEach(userId => {
+  userIds.forEach((userId) => {
     io.to(`user:${userId}`).emit(event, payload);
   });
 };
-
-
-
-
 
 // // src/sockets/sockets.js
 // import { Server } from "socket.io";
@@ -607,7 +604,6 @@ export const emitToUsers = (userIds = [], event, payload) => {
 
 //   return io;
 // };
-
 
 // /**
 //  * Get the io instance
