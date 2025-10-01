@@ -3,65 +3,65 @@ import mongoose from "mongoose";
 const eLearningResourceSchema = new mongoose.Schema({
   title: {
     type: String,
-    required: true
+    required: true,
   },
   description: String,
   content: String, // Could be HTML content or a URL
   language: {
     type: String,
     enum: ["en", "es", "hi", "bn", "ta", "zh"],
-    default: "en"
+    default: "en",
   },
   categories: [
     {
       type: String,
-      enum: [
-        "dementia-care",
-        "first-aid",
-        "medication-management",
-        "nutrition",
-        "behavior-management",
-        "stress-relief",
-        "legal-issues"
-      ]
-    }
+      // enum: [
+      //   "dementia-care",
+      //   "first-aid",
+      //   "medication-management",
+      //   "nutrition",
+      //   "behavior-management",
+      //   "stress-relief",
+      //   "legal-issues"
+      // ]
+    },
   ],
   difficulty: {
     type: String,
     enum: ["beginner", "intermediate", "advanced"],
-    default: "beginner"
+    default: "beginner",
   },
   duration: Number, // in minutes
   isActive: {
     type: Boolean,
-    default: true
+    default: true,
   },
   viewedBy: [
     {
       userId: {
         type: mongoose.Schema.Types.ObjectId,
-        ref: "User"
+        ref: "User",
       },
       date: {
         type: Date,
-        default: Date.now
+        default: Date.now,
       },
       completionPercentage: {
         type: Number,
         min: 0,
-        max: 100
-      }
-    }
+        max: 100,
+      },
+    },
   ],
   createdAt: {
     type: Date,
     default: Date.now,
-    immutable: true
+    immutable: true,
   },
   updatedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
 // Indexes for e-learning resources
