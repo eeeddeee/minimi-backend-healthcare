@@ -2,7 +2,7 @@
 import Notification from "../models/notificationModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import { sendEmail } from "../utils/emailService.js";
-import { emitToUser, emitToPatientRoom } from "../sockets/sockets.js";
+import {} from "../sockets/sockets.js";
 
 export const createNotification = async (payload, createdBy) => {
   const doc = await Notification.create([{ ...payload }]);
@@ -13,16 +13,16 @@ export const createNotification = async (payload, createdBy) => {
     entityType: "Notification",
     entityId: saved._id,
     performedBy: createdBy || saved.userId,
-    metadata: { type: saved.type, priority: saved.priority }
+    metadata: { type: saved.type, priority: saved.priority },
   });
 
   // optional email channel
   if (payload.channels?.email) {
     try {
       await sendEmail({
-        to: payload.toEmail || undefined, // optionally pass recipient email in payload
+        to: payload.toEmail || undefined,
         subject: `[${saved.type.toUpperCase()}] ${saved.title}`,
-        html: `<p>${saved.message}</p><pre>${JSON.stringify(saved.data || {}, null, 2)}</pre>`
+        html: `<p>${saved.message}</p><pre>${JSON.stringify(saved.data || {}, null, 2)}</pre>`,
       });
     } catch (_) {
       // swallow email errors; in-app is primary channel
@@ -58,19 +58,19 @@ export const listNotifications = async (
       .limit(limit)
       .select("-__v")
       .lean(),
-    Notification.countDocuments(q)
+    Notification.countDocuments(q),
   ]);
 
   await SystemLog.create({
     action: "notifications_viewed",
     entityType: "Notification",
     performedBy: userId,
-    metadata: { filters, page, limit, count: items.length }
+    metadata: { filters, page, limit, count: items.length },
   });
 
   return {
     notifications: items,
-    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
   };
 };
 
@@ -87,7 +87,7 @@ export const markRead = async (id, userId, isRead) => {
     { _id: id, userId, isDeleted: false },
     {
       $set: { isRead, readAt: isRead ? new Date() : null },
-      $currentDate: { updatedAt: true }
+      $currentDate: { updatedAt: true },
     },
     { new: true }
   )
@@ -100,7 +100,7 @@ export const markRead = async (id, userId, isRead) => {
     action: isRead ? "notification_read" : "notification_unread",
     entityType: "Notification",
     entityId: id,
-    performedBy: userId
+    performedBy: userId,
   });
 
   return updated;
@@ -113,14 +113,14 @@ export const markAllRead = async (userId, filters = {}) => {
 
   const res = await Notification.updateMany(q, {
     $set: { isRead: true, readAt: new Date() },
-    $currentDate: { updatedAt: true }
+    $currentDate: { updatedAt: true },
   });
 
   await SystemLog.create({
     action: "notifications_mark_all_read",
     entityType: "Notification",
     performedBy: userId,
-    metadata: { matched: res.matchedCount, modified: res.modifiedCount }
+    metadata: { matched: res.matchedCount, modified: res.modifiedCount },
   });
 
   return { matched: res.matchedCount, modified: res.modifiedCount };
@@ -131,7 +131,7 @@ export const acknowledge = async (id, userId) => {
     { _id: id, userId, isDeleted: false },
     {
       $set: { isAcknowledged: true, acknowledgedAt: new Date() },
-      $currentDate: { updatedAt: true }
+      $currentDate: { updatedAt: true },
     },
     { new: true }
   )
@@ -144,7 +144,7 @@ export const acknowledge = async (id, userId) => {
     action: "notification_acknowledged",
     entityType: "Notification",
     entityId: id,
-    performedBy: userId
+    performedBy: userId,
   });
 
   return updated;
@@ -165,7 +165,7 @@ export const softDelete = async (id, userId) => {
     action: "notification_deleted",
     entityType: "Notification",
     entityId: id,
-    performedBy: userId
+    performedBy: userId,
   });
 
   return updated;

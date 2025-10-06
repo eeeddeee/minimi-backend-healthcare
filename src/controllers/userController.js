@@ -14,7 +14,7 @@ import {
   nurseTemplate,
   caregiverTemplate,
   familyMemberTemplate,
-  patientTemplate
+  patientTemplate,
 } from "../utils/emailTemplates.js";
 import mongoose from "mongoose";
 
@@ -23,7 +23,7 @@ const errorResponse = (res, error) => {
     .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
     .json({
       success: false,
-      message: error.message || "Something went wrong"
+      message: error.message || "Something went wrong",
     });
 };
 
@@ -42,7 +42,7 @@ export const registerHospitalAdmin = async (req, res) => {
 
     const hospitalData = {
       ...req.body.hospitalData,
-      hospitalUserId: user.id || user._id
+      hospitalUserId: user.id || user._id,
     };
 
     // console.log("User returned:", user);
@@ -63,14 +63,14 @@ export const registerHospitalAdmin = async (req, res) => {
     await sendEmail({
       to: user.email,
       subject: `Your Hospital Admin Account Credentials`,
-      html: template(user.email, randomPassword, loginUrl)
+      html: template(user.email, randomPassword, loginUrl),
     });
 
-   return res.success(
-     "Hospital admin registered successfully.",
-     { user, hospital },
-     StatusCodes.CREATED
-   );
+    return res.success(
+      "Hospital admin registered successfully.",
+      { user, hospital },
+      StatusCodes.CREATED
+    );
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
@@ -83,15 +83,18 @@ export const registerNurse = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    const { user, randomPassword } = await userService.createNurse(req.body, req.user._id, session);
+    const { user, randomPassword } = await userService.createNurse(
+      req.body,
+      req.user._id,
+      session
+    );
 
     const nurseData = {
       ...req.body.nurseData,
       nurseUserId: user.id || user._id,
-      hospitalId: req.user.id
+      hospitalId: req.user.id,
     };
 
-    
     console.log("User returned:", user);
     console.log("Nurse data:", nurseData);
 
@@ -109,7 +112,7 @@ export const registerNurse = async (req, res) => {
     await sendEmail({
       to: user.email,
       subject: `Your Nurse Account Credentials`,
-      html: template(user.email, randomPassword, loginUrl)
+      html: template(user.email, randomPassword, loginUrl),
     });
 
     return res.success(
@@ -139,7 +142,7 @@ export const registerCaregiver = async (req, res) => {
     const caregiverData = {
       ...req.body.caregiverData,
       caregiverUserId: user.id || user._id,
-      hospitalId: req.user.id
+      hospitalId: req.user.id,
     };
 
     // 3. Create caregiver profile
@@ -157,7 +160,7 @@ export const registerCaregiver = async (req, res) => {
     await sendEmail({
       to: user.email,
       subject: `Your Caregiver Account Credentials`,
-      html: template(user.email, randomPassword, loginUrl)
+      html: template(user.email, randomPassword, loginUrl),
     });
 
     return res.success(
@@ -180,12 +183,12 @@ export const registerPatient = async (req, res) => {
     const { user, randomPassword } = await userService.createPatient(
       {
         ...req.body,
-        hospitalId: req.user.hospitalId || req.user.id
+        hospitalId: req.user.hospitalId || req.user.id,
       },
       req.user._id,
       session
     );
-// console.log("REGISTER PATIENT BODY: ", req.body);
+    // console.log("REGISTER PATIENT BODY: ", req.body);
     const patient = await patientService.createPatient(
       {
         patientUserId: user.id,
@@ -196,7 +199,7 @@ export const registerPatient = async (req, res) => {
         height: req.body.height,
         weight: req.body.weight,
         emergencyContacts: req.body.emergencyContacts,
-        insurance: req.body.insurance
+        insurance: req.body.insurance,
       },
       req.user._id,
       session
@@ -210,7 +213,7 @@ export const registerPatient = async (req, res) => {
     await sendEmail({
       to: user.email,
       subject: `Your Patient Account Credentials`,
-      html: template(user.email, randomPassword, loginUrl)
+      html: template(user.email, randomPassword, loginUrl),
     });
 
     return res.success(
@@ -232,13 +235,13 @@ export const registerFamilyMember = async (req, res) => {
   try {
     // 1. Fetch the patient using patientNumber
     const patient = await Patient.findOne({
-      patientNumber: req.body.patientNumber
+      patientId: req.body.patientUserId,
     }).session(session);
 
     if (!patient) {
       throw {
         statusCode: StatusCodes.NOT_FOUND,
-        message: "Patient not found with the provided patient number"
+        message: "Patient not found with the provided patient number",
       };
     }
 
@@ -248,7 +251,7 @@ export const registerFamilyMember = async (req, res) => {
     ) {
       throw {
         statusCode: StatusCodes.FORBIDDEN,
-        message: "Patient does not belong to your hospital"
+        message: "Patient does not belong to your hospital",
       };
     }
 
@@ -256,7 +259,7 @@ export const registerFamilyMember = async (req, res) => {
     const { user, randomPassword } = await userService.createFamilyMember(
       {
         ...req.body,
-        hospitalId: req.user.hospitalId || req.user._id
+        hospitalId: req.user.hospitalId || req.user._id,
       },
       req.user._id,
       session
@@ -269,7 +272,7 @@ export const registerFamilyMember = async (req, res) => {
         patientId: patient._id, // Use the patientId fetched above
         relationship: req.body.relationship,
         canMakeAppointments: req.body.canMakeAppointments || false,
-        canAccessMedicalRecords: req.body.canAccessMedicalRecords || false
+        canAccessMedicalRecords: req.body.canAccessMedicalRecords || false,
       },
       req.user._id,
       session
@@ -290,7 +293,7 @@ export const registerFamilyMember = async (req, res) => {
     await sendEmail({
       to: user.email,
       subject: `Your Family Member Account Credentials`,
-      html: familyMemberTemplate(user.email, randomPassword, loginUrl)
+      html: familyMemberTemplate(user.email, randomPassword, loginUrl),
     });
 
     return res.success(
@@ -305,7 +308,6 @@ export const registerFamilyMember = async (req, res) => {
     session.endSession();
   }
 };
-
 
 export const updateProfile = async (req, res) => {
   try {
@@ -335,8 +337,8 @@ export const updateProfile = async (req, res) => {
       entityId: id,
       performedBy: req.user._id,
       metadata: {
-        updatedFields: Object.keys(updateData)
-      }
+        updatedFields: Object.keys(updateData),
+      },
     });
 
     return res.success(
@@ -349,12 +351,10 @@ export const updateProfile = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message || "Failed to update profile"
+        message: error.message || "Failed to update profile",
       });
   }
 };
-
-
 
 export const deactivateUser = async (req, res) => {
   try {
@@ -363,13 +363,13 @@ export const deactivateUser = async (req, res) => {
     return res.status(StatusCodes.OK).json({
       success: true,
       message: "User has been deactivated successfully.",
-      data: deactivatedUser
+      data: deactivatedUser,
     });
   } catch (error) {
     return res.status(StatusCodes.INTERNAL_SERVER_ERROR).json({
       success: false,
       message:
-        error.message || "Something went wrong while deactivating the user."
+        error.message || "Something went wrong while deactivating the user.",
     });
   }
 };
@@ -388,7 +388,7 @@ export const updateUserProfile = async (req, res) => {
       const { key } = await uploadBufferToS3({
         buffer: req.file.buffer,
         mimeType: req.file.mimetype,
-        keyPrefix: "profiles/users"
+        keyPrefix: "profiles/users",
       });
       profileImageKey = key;
     }
@@ -421,8 +421,8 @@ export const updateUserProfile = async (req, res) => {
           entityType: "User",
           entityId: userId,
           performedBy: userId,
-          metadata: { fields: Object.keys(userPayload) }
-        }
+          metadata: { fields: Object.keys(userPayload) },
+        },
       ],
       { session }
     );
@@ -443,7 +443,7 @@ export const updateUserProfile = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message || "Failed to update profile"
+        message: error.message || "Failed to update profile",
       });
   }
 };
@@ -453,11 +453,17 @@ export const getUserStatsByRole = async (req, res) => {
     const { role, hospitalId: hospitalIdFromQuery } = req.query;
 
     const hospitalId =
-      req.user?.role === "hospital" ? req.user._id : hospitalIdFromQuery || undefined;
+      req.user?.role === "hospital"
+        ? req.user._id
+        : hospitalIdFromQuery || undefined;
 
     const result = await userService.getUserStatsByRole(role, hospitalId);
 
-    return res.success("User stats fetched successfully.", result, StatusCodes.OK);
+    return res.success(
+      "User stats fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
   } catch (error) {
     return res
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
@@ -502,12 +508,10 @@ export const getUserStatsForAdmin = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message
+        message: error.message,
       });
   }
 };
-
-
 
 export const getHospitalStatsByDate = async (req, res) => {
   try {
@@ -525,7 +529,7 @@ export const getHospitalStatsByDate = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message
+        message: error.message,
       });
   }
 };
@@ -575,7 +579,7 @@ export const getHospitalStats = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message
+        message: error.message,
       });
   }
 };

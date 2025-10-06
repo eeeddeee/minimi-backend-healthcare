@@ -1,5 +1,6 @@
 import Stripe from "stripe";
 import { StatusCodes } from "http-status-codes";
+import { notifySuperAdmins } from "../utils/notify.js";
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -118,6 +119,36 @@ export const onCompleteCheckout = async (req, res) => {
       await user.save();
     }
 
+    try {
+      const amount = session.amount_total ? session.amount_total / 100 : 0;
+      const currency = (session.currency || "usd").toUpperCase();
+
+      const dataPayload = {
+        paymentId: payment._id,
+        sessionId: session.id,
+        stripeSubscriptionId: subscription.id,
+        userId: user?._id,
+        userEmail: user?.email,
+        amount,
+        currency,
+        startDate: payment.startDate,
+        dueDate: payment.dueDate,
+        currentPeriodEnd: user?.subscription?.currentPeriodEnd,
+      };
+
+      await notifySuperAdmins({
+        type: "system",
+        title: "New subscription activated",
+        message: `${user?.email || "A user"} started a subscription (${amount} ${currency}).`,
+        data: dataPayload,
+        priority: "normal",
+        emitEvent: "notification:new",
+      });
+    } catch (notifyErr) {
+      console.error("Super admin notification failed:", notifyErr);
+      // Do not fail the payment flow on notification error
+    }
+
     return res.success(
       "Subscription successfully created.",
       { payment },
@@ -179,6 +210,32 @@ export const cancelSubscription = async (req, res) => {
     // user.subscription.dueDate;
     user.isPayment = false;
     await user.save();
+
+    try {
+      await notifySuperAdmins({
+        type: "system",
+        title: "Subscription cancelled",
+        message: `${user.email} cancelled their subscription.`,
+        data: {
+          userId: user._id,
+          userEmail: user.email,
+          subscriptionId,
+          cancelledAt: new Date(),
+          note: note || null,
+          feedback: feedback || null,
+          stripe: {
+            id: canceled?.id,
+            status: canceled?.status,
+            canceled_at: canceled?.canceled_at
+              ? new Date(canceled.canceled_at * 1000)
+              : null,
+          },
+        },
+        priority: "low",
+      });
+    } catch (notifyErr) {
+      console.error("Super admin cancellation notification failed:", notifyErr);
+    }
 
     return res.status(200).json({
       status: 200,

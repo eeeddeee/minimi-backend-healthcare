@@ -6,12 +6,13 @@ import {
   loginSchema,
   forgotPasswordSchema,
   resetPasswordSchema,
-  changePasswordSchema
+  changePasswordSchema,
 } from "../../validation/authValidation.js";
 
 const router = express.Router();
 
-router.post("/login", validate(loginSchema), authController.login);
+router.post("/login", validate(loginSchema), authController.webLogin);
+router.post("/login-mobile", validate(loginSchema), authController.mobileLogin);
 router.post(
   "/forgot-password",
   validate(forgotPasswordSchema),
@@ -29,6 +30,6 @@ router.post(
   validate(changePasswordSchema),
   authController.changePassword
 );
-router.post("/logout",authenticate, authController.logout);
+router.post("/logout", authenticate, authController.logout);
 
 export default router;

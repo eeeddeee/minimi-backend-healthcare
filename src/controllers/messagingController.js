@@ -8,7 +8,7 @@ import { ensureParticipantAccess } from "../utils/messagingAccess.js";
 const errorResponse = (res, error, fallback) =>
   res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json({
     success: false,
-    message: error.message || fallback
+    message: error.message || fallback,
   });
 
 // POST /messages/threads
@@ -20,7 +20,7 @@ export const createThread = async (req, res) => {
     const thread = await messagingService.createThread({
       subject: req.body.subject,
       participantUserIds: req.body.participantUserIds,
-      creatorId: req.user._id
+      creatorId: req.user._id,
     });
 
     return res.success(
@@ -37,7 +37,7 @@ export const createThread = async (req, res) => {
 export const listThreads = async (req, res) => {
   try {
     const result = await messagingService.listThreads({
-      userId: req.user._id
+      userId: req.user._id,
       // page: parseInt(req.query.page),
       // limit: parseInt(req.query.limit)
     });
@@ -75,7 +75,7 @@ export const postMessage = async (req, res) => {
     const message = await messagingService.postMessage({
       conversationId: req.params.id,
       senderId: req.user._id,
-      content: req.body.content
+      content: req.body.content,
     });
 
     return res.success(
@@ -99,7 +99,7 @@ export const postAttachmentsMessage = async (req, res) => {
     if (!files.length && !content.trim()) {
       return res.status(StatusCodes.BAD_REQUEST).json({
         success: false,
-        message: "Either attachments or content is required"
+        message: "Either attachments or content is required",
       });
     }
 
@@ -110,14 +110,14 @@ export const postAttachmentsMessage = async (req, res) => {
       await uploadBufferToS3({
         buffer: f.buffer,
         key,
-        contentType: f.mimetype
+        contentType: f.mimetype,
       });
       attachments.push({
         type: mapMimeToAttachmentType(f.mimetype),
         key,
         originalName: f.originalname,
         size: f.size,
-        mimeType: f.mimetype
+        mimeType: f.mimetype,
       });
     }
 
@@ -125,7 +125,7 @@ export const postAttachmentsMessage = async (req, res) => {
       conversationId: req.params.id,
       senderId: req.user._id,
       content,
-      attachments
+      attachments,
     });
 
     return res.success(
@@ -138,7 +138,7 @@ export const postAttachmentsMessage = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message || "Failed to send attachments"
+        message: error.message || "Failed to send attachments",
       });
   }
 };
@@ -151,7 +151,7 @@ export const listMessages = async (req, res) => {
     const result = await messagingService.listMessages({
       conversationId: req.params.id,
       page: parseInt(req.query.page),
-      limit: parseInt(req.query.limit)
+      limit: parseInt(req.query.limit),
     });
 
     return res.success(
@@ -163,29 +163,6 @@ export const listMessages = async (req, res) => {
     return errorResponse(res, error, "Failed to fetch messages");
   }
 };
-
-
-// // GET /messages/threads/:id/messages On Scrolling Up for Older Messages
-// export const listMessages = async (req, res) => {
-//   try {
-//     await ensureParticipantAccess(req.user, req.params.id);
-
-//     const result = await messagingService.listMessages({
-//       conversationId: req.params.id,
-//       limit: parseInt(req.query.limit) || 20,
-//       before: req.query.before // ISO timestamp for loading older messages
-//     });
-
-//     return res.success(
-//       "Messages fetched successfully.",
-//       result,
-//       StatusCodes.OK
-//     );
-//   } catch (error) {
-//     return errorResponse(res, error, "Failed to fetch messages");
-//   }
-// };
-
 
 // PATCH /conversations/:id/read
 export const markThreadRead = async (req, res) => {
@@ -215,7 +192,7 @@ export const deleteMessage = async (req, res) => {
     const deletedMessage = await messagingService.softDeleteMessage({
       messageId: req.params.messageId,
       userId: req.user._id,
-      conversationId: req.params.conversationId
+      conversationId: req.params.conversationId,
     });
 
     return res.success(
@@ -240,10 +217,32 @@ export const getAvailableChatUsers = async (req, res) => {
   } catch (error) {
     return res.status(error.statusCode || 500).json({
       success: false,
-      message: error.message || "Failed to fetch available users for chat"
+      message: error.message || "Failed to fetch available users for chat",
     });
   }
 };
+
+// // GET /messages/threads/:id/messages On Scrolling Up for Older Messages
+// export const listMessages = async (req, res) => {
+//   try {
+//     await ensureParticipantAccess(req.user, req.params.id);
+
+//     const result = await messagingService.listMessages({
+//       conversationId: req.params.id,
+//       limit: parseInt(req.query.limit) || 20,
+//       before: req.query.before // ISO timestamp for loading older messages
+//     });
+
+//     return res.success(
+//       "Messages fetched successfully.",
+//       result,
+//       StatusCodes.OK
+//     );
+//   } catch (error) {
+//     return errorResponse(res, error, "Failed to fetch messages");
+//   }
+// };
+
 //
 //
 // export const getAssociatedUsers = async (req, res) => {
@@ -262,8 +261,6 @@ export const getAvailableChatUsers = async (req, res) => {
 //     return errorResponse(res, error, "Failed to fetch associated users");
 //   }
 // };
-
-
 
 // // export const listAvailableUsers = async (req, res) => {
 //   try {
