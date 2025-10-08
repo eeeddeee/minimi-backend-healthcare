@@ -6,6 +6,15 @@ import Caregiver from "../models/caregiverModel.js";
 import FamilyMember from "../models/familyModel.js";
 import Nurse from "../models/nurseModel.js";
 import User from "../models/userModel.js";
+import {
+  notifyAssignNurseToPatient,
+  notifyAssignCaregiverToNurse,
+  notifyAssignCaregiverToPatient,
+  notifyAssignFamilyToPatient,
+  notifyPatientAboutNurseAssignment,
+  notifyPatientAboutCaregiverAssignment,
+  notifyNurseAboutCaregiverAssignment,
+} from "../utils/notify.js";
 
 /**
  * Common hospital / access checks:
@@ -15,14 +24,13 @@ import User from "../models/userModel.js";
  * - FamilyMember profile: if not found for this patient, create one (with provided flags).
  */
 
-
 export const ensureNurseInHospital = async (nurseUserId, hospitalId) => {
   // user role must be nurse
   const user = await User.findById(nurseUserId).lean();
   if (!user || user.role !== "nurse") {
     throw {
       statusCode: StatusCodes.BAD_REQUEST,
-      message: "Invalid nurse user"
+      message: "Invalid nurse user",
     };
   }
   // nurse profile must match hospital
@@ -30,14 +38,11 @@ export const ensureNurseInHospital = async (nurseUserId, hospitalId) => {
   if (!nurse) {
     throw {
       statusCode: StatusCodes.FORBIDDEN,
-      message: "Nurse not in your hospital"
+      message: "Nurse not in your hospital",
     };
   }
   return { user, nurse };
 };
-
-
-
 
 export const ensurePatientInHospital = async (patientId, hospitalId) => {
   const patient = await Patient.findById(patientId).lean();
@@ -47,7 +52,7 @@ export const ensurePatientInHospital = async (patientId, hospitalId) => {
   if (String(patient.hospitalId) !== String(hospitalId)) {
     throw {
       statusCode: StatusCodes.FORBIDDEN,
-      message: "Patient not in your hospital"
+      message: "Patient not in your hospital",
     };
   }
   return patient;
@@ -62,18 +67,18 @@ export const ensureCaregiverInHospital = async (
   if (!user || user.role !== "caregiver") {
     throw {
       statusCode: StatusCodes.BAD_REQUEST,
-      message: "Invalid caregiver user"
+      message: "Invalid caregiver user",
     };
   }
   // caregiver profile must match hospital
   const caregiver = await Caregiver.findOne({
     caregiverUserId,
-    hospitalId
+    hospitalId,
   }).lean();
   if (!caregiver) {
     throw {
       statusCode: StatusCodes.FORBIDDEN,
-      message: "Caregiver not in your hospital"
+      message: "Caregiver not in your hospital",
     };
   }
   return { user, caregiver };
@@ -84,10 +89,79 @@ export const ensureFamilyUser = async (familyMemberUserId) => {
   if (!user || user.role !== "family") {
     throw {
       statusCode: StatusCodes.BAD_REQUEST,
-      message: "Invalid family member user"
+      message: "Invalid family member user",
     };
   }
   return user;
+};
+
+const ensureUserIsActive = async (userId) => {
+  const user = await User.findById(userId).lean();
+
+  if (!user) {
+    const error = new Error("User not found");
+    error.statusCode = StatusCodes.NOT_FOUND;
+    throw error;
+  }
+
+  if (!user.isActive) {
+    const role = user.role ? user.role.replace(/_/g, " ") : "User";
+    const error = new Error(
+      `${role.charAt(0).toUpperCase() + role.slice(1)} user is not active`
+    );
+    error.statusCode = StatusCodes.BAD_REQUEST;
+    throw error;
+  }
+
+  return user;
+};
+
+// --- NEW: Assign caregiver to nurse (same hospital) ---
+export const assignCaregiverToNurse = async ({
+  caregiverUserId,
+  nurseUserId,
+  performedBy,
+}) => {
+  await ensureUserIsActive(caregiverUserId);
+  await ensureUserIsActive(nurseUserId);
+
+  const hospitalId = performedBy.hospitalId || performedBy._id;
+
+  // validate both sides in same hospital
+  const { caregiver } = await ensureCaregiverInHospital(
+    caregiverUserId,
+    hospitalId
+  );
+  await ensureNurseInHospital(nurseUserId, hospitalId);
+
+  const updated = await Caregiver.findByIdAndUpdate(
+    caregiver._id,
+    { $set: { nurseId: nurseUserId } },
+    { new: true }
+  ).lean();
+
+  await SystemLog.create({
+    action: "caregiver_nurse_assigned",
+    entityType: "Caregiver",
+    entityId: caregiver._id,
+    performedBy: performedBy._id,
+    metadata: { caregiverUserId, nurseUserId },
+  });
+
+  await Promise.all([
+    notifyAssignCaregiverToNurse({
+      caregiverUserId,
+      nurseUserId,
+      assignedByUserId: performedBy._id,
+    }),
+    notifyNurseAboutCaregiverAssignment({
+      caregiverUserId,
+      nurseUserId,
+      assignedByUserId: performedBy._id,
+    }),
+  ]);
+
+  return updated;
 };
 
 // Assign caregiver (primary/secondary)
@@ -95,8 +169,9 @@ export const assignCaregiverToPatient = async ({
   patientId,
   caregiverUserId,
   isPrimary,
-  performedBy
+  performedBy,
 }) => {
+  await ensureUserIsActive(caregiverUserId);
   // performedBy is nurse/hospital user with hospitalId
   const hospitalId = performedBy.hospitalId || performedBy._id;
 
@@ -108,7 +183,7 @@ export const assignCaregiverToPatient = async ({
     : { $addToSet: { secondaryCaregiverIds: caregiverUserId } };
 
   const updated = await Patient.findByIdAndUpdate(patientId, updateOp, {
-    new: true
+    new: true,
   }).lean();
 
   await SystemLog.create({
@@ -116,8 +191,23 @@ export const assignCaregiverToPatient = async ({
     entityType: "Patient",
     entityId: patientId,
     performedBy: performedBy._id,
-    metadata: { caregiverUserId, isPrimary }
+    metadata: { caregiverUserId, isPrimary },
   });
+
+  await Promise.all([
+    notifyAssignCaregiverToPatient({
+      patientId,
+      caregiverUserId,
+      isPrimary,
+      assignedByUserId: performedBy._id,
+    }),
+    notifyPatientAboutCaregiverAssignment({
+      patientId,
+      caregiverUserId,
+      isPrimary,
+      assignedByUserId: performedBy._id,
+    }),
+  ]);
 
   return updated;
 };
@@ -129,8 +219,9 @@ export const assignFamilyMemberToPatient = async ({
   relationship = "other",
   canMakeAppointments = false,
   canAccessMedicalRecords = false,
-  performedBy
+  performedBy,
 }) => {
+  await ensureUserIsActive(familyMemberUserId);
   const hospitalId = performedBy.hospitalId || performedBy._id;
 
   const patient = await ensurePatientInHospital(patientId, hospitalId);
@@ -139,7 +230,7 @@ export const assignFamilyMemberToPatient = async ({
   // ensure FamilyMember profile exists for patient+user
   let profile = await FamilyMember.findOne({
     patientId,
-    familyMemberUserId
+    familyMemberUserId,
   }).lean();
 
   if (!profile) {
@@ -151,8 +242,8 @@ export const assignFamilyMemberToPatient = async ({
         relationship,
         canMakeAppointments,
         canAccessMedicalRecords,
-        createdBy: performedBy._id
-      }
+        createdBy: performedBy._id,
+      },
     ]);
     profile = created[0].toObject();
   } else {
@@ -180,85 +271,26 @@ export const assignFamilyMemberToPatient = async ({
     entityType: "Patient",
     entityId: patientId,
     performedBy: performedBy._id,
-    metadata: { familyMemberUserId, relationship }
+    metadata: { familyMemberUserId, relationship },
+  });
+
+  await notifyAssignFamilyToPatient({
+    patientId,
+    familyMemberUserId,
+    relationship,
+    assignedByUserId: performedBy._id,
   });
 
   return { patient: updated, familyProfile: profile };
 };
 
-// --- UNASSIGN CAREGIVER ---
-export const unassignCaregiverFromPatient = async ({
-  patientId,
-  caregiverUserId,
-  type,
-  performedBy
-}) => {
-  const hospitalId = performedBy.hospitalId || performedBy._id;
-  await ensurePatientInHospital(patientId, hospitalId);
-
-  // verify caregiver exists (optional strict)
-  const caregiverUser = await User.findById(caregiverUserId).lean();
-  if (!caregiverUser || caregiverUser.role !== "caregiver") {
-    throw { statusCode: StatusCodes.BAD_REQUEST, message: "Invalid caregiver user" };
-  }
-
-  const pull = {};
-  if (!type || type === "primary") pull.primaryCaregiverId = caregiverUserId;
-  if (!type || type === "secondary") pull.secondaryCaregiverIds = caregiverUserId;
-
-  const updated = await Patient.findByIdAndUpdate(
-    patientId,
-    { $pull: pull },
-    { new: true }
-  ).lean();
-
-  await SystemLog.create({
-    action: "patient_caregiver_unassigned",
-    entityType: "Patient",
-    entityId: patientId,
-    performedBy: performedBy._id,
-    metadata: { caregiverUserId, type: type || "both" }
-  });
-
-  return updated;
-};
-
-// --- UNASSIGN FAMILY MEMBER ---
-export const unassignFamilyMemberFromPatient = async ({
-  patientId,
-  familyMemberUserId,
-  performedBy
-}) => {
-  const hospitalId = performedBy.hospitalId || performedBy._id;
-  await ensurePatientInHospital(patientId, hospitalId);
-
-  const familyUser = await User.findById(familyMemberUserId).lean();
-  if (!familyUser || familyUser.role !== "family") {
-    throw { statusCode: StatusCodes.BAD_REQUEST, message: "Invalid family member user" };
-  }
-
-  const updated = await Patient.findByIdAndUpdate(
-    patientId,
-    { $pull: { familyMemberIds: familyMemberUserId } },
-    { new: true }
-  ).lean();
-
-  await SystemLog.create({
-    action: "patient_family_member_unassigned",
-    entityType: "Patient",
-    entityId: patientId,
-    performedBy: performedBy._id,
-    metadata: { familyMemberUserId }
-  });
-
-  // NOTE: FamilyMember profile document (patientId+userId) ko hum delete nahi kar rahe
-  // taake historical links/logs safe rahein. Agar chaho to soft-delete flag add kar sakte ho.
-
-  return updated;
-};
-
 // --- NEW: Assign nurse to patient ---
-export const assignNurseToPatient = async ({ patientId, nurseUserId, performedBy }) => {
+export const assignNurseToPatient = async ({
+  patientId,
+  nurseUserId,
+  performedBy,
+}) => {
+  await ensureUserIsActive(nurseUserId);
   const hospitalId = performedBy.hospitalId || performedBy._id; // hospital admin OR nurse with hospitalId
   const patient = await ensurePatientInHospital(patientId, hospitalId);
   await ensureNurseInHospital(nurseUserId, patient.hospitalId);
@@ -274,14 +306,109 @@ export const assignNurseToPatient = async ({ patientId, nurseUserId, performedBy
     entityType: "Patient",
     entityId: patientId,
     performedBy: performedBy._id,
-    metadata: { nurseUserId }
+    metadata: { nurseUserId },
+  });
+
+  await Promise.all([
+    notifyAssignNurseToPatient({
+      patientId,
+      nurseUserId,
+      assignedByUserId: performedBy._id,
+    }),
+    notifyPatientAboutNurseAssignment({
+      patientId,
+      nurseUserId,
+      assignedByUserId: performedBy._id,
+    }),
+  ]);
+
+  return updated;
+};
+
+// --- UNASSIGN CAREGIVER ---
+export const unassignCaregiverFromPatient = async ({
+  patientId,
+  caregiverUserId,
+  type,
+  performedBy,
+}) => {
+  const hospitalId = performedBy.hospitalId || performedBy._id;
+  await ensurePatientInHospital(patientId, hospitalId);
+
+  // verify caregiver exists (optional strict)
+  const caregiverUser = await User.findById(caregiverUserId).lean();
+  if (!caregiverUser || caregiverUser.role !== "caregiver") {
+    throw {
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: "Invalid caregiver user",
+    };
+  }
+
+  const pull = {};
+  if (!type || type === "primary") pull.primaryCaregiverId = caregiverUserId;
+  if (!type || type === "secondary")
+    pull.secondaryCaregiverIds = caregiverUserId;
+
+  const updated = await Patient.findByIdAndUpdate(
+    patientId,
+    { $pull: pull },
+    { new: true }
+  ).lean();
+
+  await SystemLog.create({
+    action: "patient_caregiver_unassigned",
+    entityType: "Patient",
+    entityId: patientId,
+    performedBy: performedBy._id,
+    metadata: { caregiverUserId, type: type || "both" },
   });
 
   return updated;
 };
 
+// --- UNASSIGN FAMILY MEMBER ---
+export const unassignFamilyMemberFromPatient = async ({
+  patientId,
+  familyMemberUserId,
+  performedBy,
+}) => {
+  const hospitalId = performedBy.hospitalId || performedBy._id;
+  await ensurePatientInHospital(patientId, hospitalId);
+
+  const familyUser = await User.findById(familyMemberUserId).lean();
+  if (!familyUser || familyUser.role !== "family") {
+    throw {
+      statusCode: StatusCodes.BAD_REQUEST,
+      message: "Invalid family member user",
+    };
+  }
+
+  const updated = await Patient.findByIdAndUpdate(
+    patientId,
+    { $pull: { familyMemberIds: familyMemberUserId } },
+    { new: true }
+  ).lean();
+
+  await SystemLog.create({
+    action: "patient_family_member_unassigned",
+    entityType: "Patient",
+    entityId: patientId,
+    performedBy: performedBy._id,
+    metadata: { familyMemberUserId },
+  });
+
+  // NOTE: FamilyMember profile document (patientId+userId) ko hum delete nahi kar rahe
+  // taake historical links/logs safe rahein. Agar chaho to soft-delete flag add kar sakte ho.
+
+  return updated;
+};
+
 // --- NEW: Unassign nurse from patient ---
-export const unassignNurseFromPatient = async ({ patientId, nurseUserId, performedBy }) => {
+export const unassignNurseFromPatient = async ({
+  patientId,
+  nurseUserId,
+  performedBy,
+}) => {
   const hospitalId = performedBy.hospitalId || performedBy._id;
   await ensurePatientInHospital(patientId, hospitalId);
 
@@ -290,7 +417,7 @@ export const unassignNurseFromPatient = async ({ patientId, nurseUserId, perform
   if (!user || user.role !== "nurse") {
     throw {
       statusCode: StatusCodes.BAD_REQUEST,
-      message: "Invalid nurse user"
+      message: "Invalid nurse user",
     };
   }
 
@@ -305,42 +432,23 @@ export const unassignNurseFromPatient = async ({ patientId, nurseUserId, perform
     entityType: "Patient",
     entityId: patientId,
     performedBy: performedBy._id,
-    metadata: { nurseUserId }
-  });
-
-  return updated;
-};
-
-// --- NEW: Assign caregiver to nurse (same hospital) ---
-export const assignCaregiverToNurse = async ({ caregiverUserId, nurseUserId, performedBy }) => {
-  const hospitalId = performedBy.hospitalId || performedBy._id;
-
-  // validate both sides in same hospital
-  const { caregiver } = await ensureCaregiverInHospital(caregiverUserId, hospitalId);
-  await ensureNurseInHospital(nurseUserId, hospitalId);
-
-  const updated = await Caregiver.findByIdAndUpdate(
-    caregiver._id,
-    { $set: { nurseId: nurseUserId } },
-    { new: true }
-  ).lean();
-
-  await SystemLog.create({
-    action: "caregiver_nurse_assigned",
-    entityType: "Caregiver",
-    entityId: caregiver._id,
-    performedBy: performedBy._id,
-    metadata: { caregiverUserId, nurseUserId }
+    metadata: { nurseUserId },
   });
 
   return updated;
 };
 
 // --- NEW: Unassign caregiver from nurse ---
-export const unassignCaregiverFromNurse = async ({ caregiverUserId, performedBy }) => {
+export const unassignCaregiverFromNurse = async ({
+  caregiverUserId,
+  performedBy,
+}) => {
   const hospitalId = performedBy.hospitalId || performedBy._id;
 
-  const { caregiver } = await ensureCaregiverInHospital(caregiverUserId, hospitalId);
+  const { caregiver } = await ensureCaregiverInHospital(
+    caregiverUserId,
+    hospitalId
+  );
 
   const updated = await Caregiver.findByIdAndUpdate(
     caregiver._id,
@@ -353,7 +461,7 @@ export const unassignCaregiverFromNurse = async ({ caregiverUserId, performedBy 
     entityType: "Caregiver",
     entityId: caregiver._id,
     performedBy: performedBy._id,
-    metadata: { caregiverUserId }
+    metadata: { caregiverUserId },
   });
 
   return updated;
@@ -367,41 +475,56 @@ export const getAssignmentsByPatient = async ({ patientId, performedBy }) => {
   // Populate users for clarity
   const populated = await Patient.findById(patientId)
     .select("primaryCaregiverId secondaryCaregiverIds familyMemberIds")
-    .populate({ path: "primaryCaregiverId", select: "firstName lastName email phone profile_image" })
-    .populate({ path: "secondaryCaregiverIds", select: "firstName lastName email phone profile_image" })
-    .populate({ path: "familyMemberIds", select: "firstName lastName email phone profile_image" })
+    .populate({
+      path: "primaryCaregiverId",
+      select: "firstName lastName email phone profile_image",
+    })
+    .populate({
+      path: "secondaryCaregiverIds",
+      select: "firstName lastName email phone profile_image",
+    })
+    .populate({
+      path: "familyMemberIds",
+      select: "firstName lastName email phone profile_image",
+    })
     .lean();
 
   // Optionally include caregiver/family profiles detail
   const caregiverProfiles = await Caregiver.find({
-    caregiverUserId: { $in: [
-      ...(patient.primaryCaregiverId || []),
-      ...(patient.secondaryCaregiverIds || [])
-    ] },
-    hospitalId: patient.hospitalId
-  }).select("-__v").lean();
+    caregiverUserId: {
+      $in: [
+        ...(patient.primaryCaregiverId || []),
+        ...(patient.secondaryCaregiverIds || []),
+      ],
+    },
+    hospitalId: patient.hospitalId,
+  })
+    .select("-__v")
+    .lean();
 
   const familyProfiles = await FamilyMember.find({
     patientId,
-    familyMemberUserId: { $in: patient.familyMemberIds || [] }
-  }).select("-__v").lean();
+    familyMemberUserId: { $in: patient.familyMemberIds || [] },
+  })
+    .select("-__v")
+    .lean();
 
   await SystemLog.create({
     action: "patient_assignments_viewed",
     entityType: "Patient",
     entityId: patientId,
-    performedBy: performedBy._id
+    performedBy: performedBy._id,
   });
 
   return {
     caregivers: {
       primary: populated.primaryCaregiverId || [],
       secondary: populated.secondaryCaregiverIds || [],
-      profiles: caregiverProfiles
+      profiles: caregiverProfiles,
     },
     familyMembers: {
       users: populated.familyMemberIds || [],
-      profiles: familyProfiles
-    }
+      profiles: familyProfiles,
+    },
   };
 };

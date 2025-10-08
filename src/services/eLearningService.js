@@ -4,10 +4,14 @@ import ELearningResource from "../models/eLearningResourceModel.js";
 import TrainingFeedback from "../models/trainingFeedbackModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import mongoose from "mongoose";
+import {
+  notifyHospitalStaff,
+  notifyHospitalOnFeedback,
+} from "../utils/notify.js";
 
 // Create resource
 export const createResource = async (data, createdBy) => {
-  const doc = await ELearningResource.create([{ ...data }]);
+  const doc = await ELearningResource.create([{ ...data, createdBy }]);
   const saved = doc[0].toObject();
 
   await SystemLog.create({
@@ -15,8 +19,41 @@ export const createResource = async (data, createdBy) => {
     entityType: "ELearningResource",
     entityId: saved._id,
     performedBy: createdBy,
-    metadata: { title: saved.title }
+    metadata: { title: saved.title },
   });
+
+  try {
+    const title = `New training: ${saved.title || "E-Learning Resource"}`;
+    const message = saved.description
+      ? saved.description.slice(0, 140)
+      : "A new training resource has been published.";
+
+    const dataPayload = {
+      kind: "elearning_created",
+      resourceId: saved._id,
+      title: saved.title,
+      // if you have route like /e-learning/:id
+      deeplink: `/e-learning/${saved._id}`,
+      hospitalUserId: createdBy,
+      tags: saved.tags || [],
+      category: saved.category || null,
+    };
+
+    await notifyHospitalStaff({
+      hospitalUserId: createdBy,
+      excludeUserId: createdBy,
+      roles: ["nurse", "caregiver"],
+      type: "system",
+      priority: "normal",
+      title,
+      message,
+      data: dataPayload,
+      emitEvent: "notification:new",
+      emitCount: true,
+    });
+  } catch (e) {
+    console.error("eLearning notifyHospitalStaff failed:", e);
+  }
 
   return saved;
 };
@@ -32,7 +69,7 @@ export const getResources = async (filters = {}, page = 1, limit = 10) => {
   if (filters.search) {
     q.$or = [
       { title: new RegExp(filters.search, "i") },
-      { description: new RegExp(filters.search, "i") }
+      { description: new RegExp(filters.search, "i") },
     ];
   }
 
@@ -43,18 +80,18 @@ export const getResources = async (filters = {}, page = 1, limit = 10) => {
       .limit(limit)
       .select("-__v")
       .lean(),
-    ELearningResource.countDocuments(q)
+    ELearningResource.countDocuments(q),
   ]);
 
   await SystemLog.create({
     action: "elearning_resources_viewed",
     entityType: "ELearningResource",
-    metadata: { filters, page, limit, count: items.length }
+    metadata: { filters, page, limit, count: items.length },
   });
 
   return {
     resources: items,
-    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
   };
 };
 
@@ -71,9 +108,9 @@ export const getResourceById = async (id) => {
       $group: {
         _id: "$resourceId",
         avg: { $avg: "$rating" },
-        total: { $sum: 1 }
-      }
-    }
+        total: { $sum: 1 },
+      },
+    },
   ]);
   const rating = agg[0]
     ? { average: Math.round(agg[0].avg * 10) / 10, count: agg[0].total }
@@ -82,7 +119,7 @@ export const getResourceById = async (id) => {
   await SystemLog.create({
     action: "elearning_resource_viewed",
     entityType: "ELearningResource",
-    entityId: id
+    entityId: id,
   });
 
   return { resource: res, rating };
@@ -106,7 +143,7 @@ export const updateResource = async (id, updates = {}, updatedBy) => {
     entityType: "ELearningResource",
     entityId: id,
     performedBy: updatedBy,
-    metadata: { fields: Object.keys(updates) }
+    metadata: { fields: Object.keys(updates) },
   });
 
   return updated;
@@ -131,7 +168,7 @@ export const setActive = async (id, isActive, updatedBy) => {
       : "elearning_resource_deactivated",
     entityType: "ELearningResource",
     entityId: id,
-    performedBy: updatedBy
+    performedBy: updatedBy,
   });
 
   return updated;
@@ -147,7 +184,7 @@ export const markViewOrProgress = async (
     { _id: id, "viewedBy.userId": { $ne: userId } },
     {
       $push: { viewedBy: { userId, completionPercentage, date: new Date() } },
-      $currentDate: { updatedAt: true }
+      $currentDate: { updatedAt: true },
     },
     { new: true }
   );
@@ -160,9 +197,9 @@ export const markViewOrProgress = async (
       {
         $set: {
           "viewedBy.$.completionPercentage": completionPercentage,
-          "viewedBy.$.date": new Date()
+          "viewedBy.$.date": new Date(),
         },
-        $currentDate: { updatedAt: true }
+        $currentDate: { updatedAt: true },
       },
       { new: true }
     ));
@@ -172,7 +209,7 @@ export const markViewOrProgress = async (
     entityType: "ELearningResource",
     entityId: id,
     performedBy: userId,
-    metadata: { completionPercentage }
+    metadata: { completionPercentage },
   });
 
   return res?.toObject?.() || res;
@@ -191,7 +228,14 @@ export const submitFeedback = async (resourceId, userId, rating, comment) => {
     entityType: "TrainingFeedback",
     entityId: doc._id,
     performedBy: userId,
-    metadata: { resourceId, rating }
+    metadata: { resourceId, rating },
+  });
+
+  await notifyHospitalOnFeedback({
+    resourceId,
+    submittedByUserId: userId,
+    rating,
+    comment,
   });
 
   return doc;
@@ -201,13 +245,13 @@ export const getFeedbackForResource = async ({
   resourceId,
   page = 1,
   limit = 10,
-  user
+  user,
 }) => {
   // sanity + resource exists
   if (!mongoose.isValidObjectId(resourceId)) {
     throw {
       statusCode: StatusCodes.BAD_REQUEST,
-      message: "Invalid resource id"
+      message: "Invalid resource id",
     };
   }
   const resource = await ELearningResource.findById(resourceId).lean();
@@ -225,7 +269,7 @@ export const getFeedbackForResource = async ({
       .limit(limit)
       .populate({
         path: "userId",
-        select: "firstName lastName role email profile_image"
+        select: "firstName lastName role email profile_image",
       })
       .select("-__v")
       .lean(),
@@ -243,16 +287,16 @@ export const getFeedbackForResource = async ({
           r2: { $sum: { $cond: [{ $eq: ["$rating", 2] }, 1, 0] } },
           r3: { $sum: { $cond: [{ $eq: ["$rating", 3] }, 1, 0] } },
           r4: { $sum: { $cond: [{ $eq: ["$rating", 4] }, 1, 0] } },
-          r5: { $sum: { $cond: [{ $eq: ["$rating", 5] }, 1, 0] } }
-        }
-      }
+          r5: { $sum: { $cond: [{ $eq: ["$rating", 5] }, 1, 0] } },
+        },
+      },
     ]),
 
     user?._id
       ? TrainingFeedback.findOne({ resourceId, userId: user._id })
           .select("-__v")
           .lean()
-      : null
+      : null,
   ]);
 
   const statsRow = statsAgg?.[0] || {
@@ -262,7 +306,7 @@ export const getFeedbackForResource = async ({
     r2: 0,
     r3: 0,
     r4: 0,
-    r5: 0
+    r5: 0,
   };
 
   await SystemLog.create({
@@ -270,7 +314,7 @@ export const getFeedbackForResource = async ({
     entityType: "ELearningResource",
     entityId: resourceId,
     performedBy: user?._id,
-    metadata: { page, limit }
+    metadata: { page, limit },
   });
 
   return {
@@ -279,7 +323,7 @@ export const getFeedbackForResource = async ({
       page,
       limit,
       total,
-      pages: Math.ceil(total / (limit || 1))
+      pages: Math.ceil(total / (limit || 1)),
     },
     stats: {
       total: statsRow.count,
@@ -291,9 +335,9 @@ export const getFeedbackForResource = async ({
         2: statsRow.r2,
         3: statsRow.r3,
         4: statsRow.r4,
-        5: statsRow.r5
-      }
+        5: statsRow.r5,
+      },
     },
-    myFeedback: myFeedback || null
+    myFeedback: myFeedback || null,
   };
 };

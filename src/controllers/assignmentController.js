@@ -7,6 +7,41 @@ const errorResponse = (res, error, fallback = "Something went wrong") =>
     .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
     .json({ success: false, message: error.message || fallback });
 
+export const assignNurse = async (req, res) => {
+  try {
+    const updatedPatient = await assignmentService.assignNurseToPatient({
+      patientId: req.body.patientId,
+      nurseUserId: req.body.nurseUserId,
+      performedBy: req.user,
+    });
+    return res.success(
+      "Nurse assigned to patient successfully.",
+      { patient: updatedPatient },
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return errorResponse(res, error, "Failed to assign nurse");
+  }
+};
+
+// --- NEW: Caregiver <-> Nurse ---
+export const assignCaregiverToNurse = async (req, res) => {
+  try {
+    const updatedCaregiver = await assignmentService.assignCaregiverToNurse({
+      caregiverUserId: req.body.caregiverUserId,
+      nurseUserId: req.body.nurseUserId,
+      performedBy: req.user,
+    });
+    return res.success(
+      "Caregiver assigned to nurse successfully.",
+      { caregiver: updatedCaregiver },
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return errorResponse(res, error, "Failed to assign caregiver to nurse");
+  }
+};
+
 // POST /assignments/caregiver
 export const assignCaregiver = async (req, res) => {
   try {
@@ -14,7 +49,7 @@ export const assignCaregiver = async (req, res) => {
       patientId: req.body.patientId,
       caregiverUserId: req.body.caregiverUserId,
       isPrimary: !!req.body.isPrimary,
-      performedBy: req.user
+      performedBy: req.user,
     });
 
     return res.success(
@@ -36,7 +71,7 @@ export const assignFamilyMember = async (req, res) => {
       relationship: req.body.relationship,
       canMakeAppointments: req.body.canMakeAppointments,
       canAccessMedicalRecords: req.body.canAccessMedicalRecords,
-      performedBy: req.user
+      performedBy: req.user,
     });
 
     return res.success(
@@ -56,7 +91,7 @@ export const unassignCaregiver = async (req, res) => {
         patientId: req.body.patientId,
         caregiverUserId: req.body.caregiverUserId,
         type: req.body.type, // 'primary' | 'secondary' | undefined
-        performedBy: req.user
+        performedBy: req.user,
       }
     );
 
@@ -76,7 +111,7 @@ export const unassignFamilyMember = async (req, res) => {
       await assignmentService.unassignFamilyMemberFromPatient({
         patientId: req.body.patientId,
         familyMemberUserId: req.body.familyMemberUserId,
-        performedBy: req.user
+        performedBy: req.user,
       });
 
     return res.success(
@@ -89,29 +124,12 @@ export const unassignFamilyMember = async (req, res) => {
   }
 };
 
-export const assignNurse = async (req, res) => {
-  try {
-    const updatedPatient = await assignmentService.assignNurseToPatient({
-      patientId: req.body.patientId,
-      nurseUserId: req.body.nurseUserId,
-      performedBy: req.user
-    });
-    return res.success(
-      "Nurse assigned to patient successfully.",
-      { patient: updatedPatient },
-      StatusCodes.OK
-    );
-  } catch (error) {
-    return errorResponse(res, error, "Failed to assign nurse");
-  }
-};
-
 export const unassignNurse = async (req, res) => {
   try {
     const updatedPatient = await assignmentService.unassignNurseFromPatient({
       patientId: req.body.patientId,
       nurseUserId: req.body.nurseUserId,
-      performedBy: req.user
+      performedBy: req.user,
     });
     return res.success(
       "Nurse unassigned from patient successfully.",
@@ -123,30 +141,12 @@ export const unassignNurse = async (req, res) => {
   }
 };
 
-// --- NEW: Caregiver <-> Nurse ---
-export const assignCaregiverToNurse = async (req, res) => {
-  try {
-    const updatedCaregiver = await assignmentService.assignCaregiverToNurse({
-      caregiverUserId: req.body.caregiverUserId,
-      nurseUserId: req.body.nurseUserId,
-      performedBy: req.user
-    });
-    return res.success(
-      "Caregiver assigned to nurse successfully.",
-      { caregiver: updatedCaregiver },
-      StatusCodes.OK
-    );
-  } catch (error) {
-    return errorResponse(res, error, "Failed to assign caregiver to nurse");
-  }
-};
-
 export const unassignCaregiverFromNurse = async (req, res) => {
   try {
     const updatedCaregiver = await assignmentService.unassignCaregiverFromNurse(
       {
         caregiverUserId: req.body.caregiverUserId,
-        performedBy: req.user
+        performedBy: req.user,
       }
     );
     return res.success(
@@ -163,7 +163,7 @@ export const listAssignments = async (req, res) => {
   try {
     const result = await assignmentService.getAssignmentsByPatient({
       patientId: req.query.patientId,
-      performedBy: req.user
+      performedBy: req.user,
     });
 
     return res.success(

@@ -1,6 +1,6 @@
 import Stripe from "stripe";
 import { StatusCodes } from "http-status-codes";
-import { notifySuperAdmins } from "../utils/notify.js";
+import { notifySuperAdmins, notifyUser } from "../utils/notify.js";
 
 const stripe = Stripe(process.env.STRIPE_SECRET_KEY);
 
@@ -117,6 +117,34 @@ export const onCompleteCheckout = async (req, res) => {
           : null,
       };
       await user.save();
+    }
+
+    try {
+      if (user?._id) {
+        const amount = session.amount_total ? session.amount_total / 100 : 0;
+        const currency = (session.currency || "usd").toUpperCase();
+        const nextRenewal = user.subscription?.currentPeriodEnd;
+
+        await notifyUser({
+          userId: user._id,
+          requireRole: "hospital",
+          type: "system",
+          title: "Subscription activated",
+          message: `Your subscription is active. Next renewal on ${nextRenewal ? new Date(nextRenewal).toDateString() : "—"}.`,
+          priority: "normal",
+          data: {
+            kind: "subscription_activated",
+            subscriptionId: subscription.id,
+            amount,
+            currency,
+            periodStart: payment.startDate,
+            periodEnd: payment.dueDate,
+            autoRenew: !subscription.cancel_at_period_end,
+          },
+        });
+      }
+    } catch (e) {
+      console.error("Hospital admin activation notification failed:", e);
     }
 
     try {
