@@ -3,16 +3,16 @@ import { StatusCodes } from "http-status-codes";
 import { uploadBufferToS3 } from "../utils/s3Service.js";
 import * as userService from "../services/userService.js";
 import Nurse from "../models/nurseModel.js";
+import Caregiver from "../models/caregiverModel.js";
 import Hospital from "../models/hospitalModel.js";
 import mongoose from "mongoose";
-
 
 export const getPatients = async (req, res) => {
   try {
     const { page, limit, isActive, search } = req.query;
 
     const hospitalId = req.user?._id;
-    console.log(hospitalId,"Hospital ID")
+    console.log(hospitalId, "Hospital ID");
 
     const filters = {};
     if (isActive !== undefined) {
@@ -39,7 +39,7 @@ export const getPatients = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message
+        message: error.message,
       });
   }
 };
@@ -81,6 +81,43 @@ export const getNursePatients = async (req, res) => {
   }
 };
 
+export const getCaregiverPatients = async (req, res) => {
+  try {
+    const { page, limit, isActive, search } = req.query;
+
+    const caregiverUserId = req.user?._id;
+    let caregiverDocId = null;
+
+    if (mongoose.Types.ObjectId.isValid(caregiverUserId)) {
+      const caregiverDoc = await Caregiver.findOne(
+        { caregiverUserId: new mongoose.Types.ObjectId(caregiverUserId) },
+        { _id: 1 }
+      ).lean();
+      caregiverDocId = caregiverDoc?._id || null;
+    }
+
+    const filters = {};
+    if (isActive !== undefined) filters.isActive = isActive;
+    if (search) filters.search = search;
+
+    const result = await patientService.getPatientsForCaregiver(
+      filters,
+      parseInt(page),
+      parseInt(limit),
+      [caregiverUserId, caregiverDocId].filter(Boolean)
+    );
+
+    return res.success(
+      "Patients fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
 
 // export const getNursePatients = async (req, res) => {
 //   try {
@@ -133,7 +170,7 @@ export const getPatient = async (req, res) => {
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({
         success: false,
-        message: error.message
+        message: error.message,
       });
   }
 };
@@ -148,7 +185,7 @@ export const updatePatient = async (req, res) => {
     if (!userId) {
       throw {
         statusCode: StatusCodes.NOT_FOUND,
-        message: "Associated user not found for this patient"
+        message: "Associated user not found for this patient",
       };
     }
 
@@ -158,7 +195,7 @@ export const updatePatient = async (req, res) => {
       const { key } = await uploadBufferToS3({
         buffer: req.file.buffer,
         mimeType: req.file.mimetype,
-        keyPrefix: "profiles/patient"
+        keyPrefix: "profiles/patient",
       });
       profileImageKey = key;
     }
@@ -204,20 +241,17 @@ export const updatePatient = async (req, res) => {
 
     return res.success("Patient updated successfully.", {
       user: updatedUser,
-      patient: updatedPatient
+      patient: updatedPatient,
     });
   } catch (error) {
     await session.abortTransaction();
     session.endSession();
-    return res
-      .status(error.statusCode || 500)
-      .json({
-        success: false,
-        message: error.message || "Failed to update patient"
-      });
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message || "Failed to update patient",
+    });
   }
 };
-
 
 export const updatePatientStatus = async (req, res) => {
   const session = await mongoose.startSession();
@@ -229,7 +263,7 @@ export const updatePatientStatus = async (req, res) => {
     if (typeof isActive !== "boolean") {
       throw {
         statusCode: StatusCodes.BAD_REQUEST,
-        message: "isActive parameter is required and must be a boolean"
+        message: "isActive parameter is required and must be a boolean",
       };
     }
 

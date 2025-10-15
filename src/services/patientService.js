@@ -365,6 +365,169 @@ export const getPatientsForNurse = async (
   }
 };
 
+export const getPatientsForCaregiver = async (
+  query = {},
+  page,
+  limit,
+  caregiverIdsToMatch = []
+) => {
+  try {
+    const skip = (page - 1) * limit;
+
+    const ids = (
+      Array.isArray(caregiverIdsToMatch)
+        ? caregiverIdsToMatch
+        : [caregiverIdsToMatch]
+    )
+      .filter(Boolean)
+      .map((id) =>
+        mongoose.Types.ObjectId.isValid(id)
+          ? new mongoose.Types.ObjectId(id)
+          : id
+      );
+
+    if (!ids.length) {
+      throw { statusCode: 400, message: "Caregiver id is required" };
+    }
+
+    // Pre-match — match any of the caregiver arrays
+    const preMatchStage = {
+      $or: [
+        { primaryCaregiverId: { $in: ids } },
+        { secondaryCaregiverIds: { $in: ids } },
+      ],
+    };
+
+    // Optional filters (isActive, search)
+    const matchStage = {};
+    if (query.isActive !== undefined) {
+      matchStage["patientUser.isActive"] = query.isActive === "true";
+    }
+
+    if (query.search) {
+      const searchTerm = decodeURIComponent(query.search)
+        .replace(/\t/g, " ")
+        .trim()
+        .replace(/\s+/g, " ");
+
+      const exactRegex = new RegExp(`^${searchTerm}$`, "i");
+      const partialRegex = new RegExp(searchTerm, "i");
+
+      matchStage.$or = [
+        {
+          $expr: {
+            $regexMatch: {
+              input: {
+                $concat: [
+                  "$patientUser.firstName",
+                  " ",
+                  "$patientUser.lastName",
+                ],
+              },
+              regex: exactRegex,
+            },
+          },
+        },
+        { "patientUser.firstName": exactRegex },
+        { "patientUser.lastName": exactRegex },
+        { "patientUser.fullName": exactRegex },
+        { "patientUser.email": exactRegex },
+        { "patientUser.phone": exactRegex },
+        { "patientUser.firstName": partialRegex },
+        { "patientUser.lastName": partialRegex },
+        { "patientUser.fullName": partialRegex },
+      ];
+    }
+
+    const pipeline = [
+      { $match: preMatchStage },
+      {
+        $lookup: {
+          from: "users",
+          localField: "patientUserId",
+          foreignField: "_id",
+          as: "patientUser",
+        },
+      },
+      { $unwind: "$patientUser" },
+      ...(Object.keys(matchStage).length ? [{ $match: matchStage }] : []),
+      {
+        $facet: {
+          data: [
+            ...(page && limit ? [{ $skip: skip }, { $limit: limit }] : []),
+            {
+              $project: {
+                __v: 0,
+                "patientUser.passwordHash": 0,
+                "patientUser.__v": 0,
+                "patientUser.accessToken": 0,
+                "patientUser.refreshToken": 0,
+              },
+            },
+          ],
+          totalCount: [{ $count: "count" }],
+          stats: [
+            {
+              $group: {
+                _id: null,
+                totalPatients: { $sum: 1 },
+                totalActivePatients: {
+                  $sum: {
+                    $cond: [{ $eq: ["$patientUser.isActive", true] }, 1, 0],
+                  },
+                },
+                totalInactivePatients: {
+                  $sum: {
+                    $cond: [{ $eq: ["$patientUser.isActive", false] }, 1, 0],
+                  },
+                },
+              },
+            },
+          ],
+        },
+      },
+    ];
+
+    const result = await Patient.aggregate(pipeline);
+
+    const patients = result[0]?.data || [];
+    const total = result[0]?.totalCount?.[0]?.count || 0;
+    const stats = result[0]?.stats?.[0] || {
+      totalPatients: 0,
+      totalActivePatients: 0,
+      totalInactivePatients: 0,
+    };
+
+    await SystemLog.create({
+      action: "patients_viewed_by_caregiver",
+      entityType: "Patient",
+      metadata: {
+        page,
+        limit,
+        filters: query,
+        caregiverIds: ids,
+        count: patients.length,
+      },
+    });
+
+    return {
+      patients,
+      stats,
+      pagination: {
+        total,
+        page,
+        limit,
+        totalPages: Math.ceil(total / limit),
+      },
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch caregiver patients",
+      statusCode: error.statusCode || 500,
+    };
+  }
+};
+
 // export const getPatientsForNurse = async (
 //   query = {},
 //   page = 1,

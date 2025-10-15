@@ -41,4 +41,11 @@ router.post(
   patientController.getNursePatients
 );
 
+router.post(
+  "/get-caregiver-patients",
+  authenticate,
+  authorize(["caregiver"]),
+  patientController.getCaregiverPatients
+);
+
 export default router;
