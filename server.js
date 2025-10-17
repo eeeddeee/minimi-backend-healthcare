@@ -12,6 +12,7 @@ import { initSocket } from "./src/sockets/sockets.js";
 // import { createSuperAdmin } from "./src/seeders/createSuperAdmin.js";
 import stripeWebhook from "./src/utils/stripeWebhook.js";
 import { scheduleExpirySweep } from "./src/cron-jobs/subscriptionNotifier.js";
+import { scheduleDailyAIPrediction } from "./src/ai-model/aiJobs.js";
 
 import http from "http";
 
@@ -87,6 +88,7 @@ const LOCAL_HOST = process.env.LOCAL_HOST;
 
 // socket.io
 initSocket(server);
+scheduleDailyAIPrediction();
 
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
