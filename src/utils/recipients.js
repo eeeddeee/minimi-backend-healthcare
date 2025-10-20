@@ -4,37 +4,56 @@ import User from "../models/userModel.js";
 
 const idToStr = (v) => (v ? String(v) : null);
 
+export async function getPatientDisplayName(patientId) {
+  const p = await Patient.findById(patientId).select("patientUserId").lean();
+  if (!p?.patientUserId) return "Patient";
+  const u = await User.findById(p.patientUserId)
+    .select("firstName lastName email")
+    .lean();
+  const name =
+    [u?.firstName, u?.lastName].filter(Boolean).join(" ") ||
+    u?.email ||
+    "Patient";
+  return name;
+}
+
 export async function getPatientScopedRecipients(patientId) {
-  // 1) Load patient + minimal relations
   const p = await Patient.findById(patientId)
-    .select("_id createdBy caregivers primaryCaregiverId familyMemberIds")
+    .select(
+      "_id createdBy caregivers primaryCaregiverId familyMemberIds nurseIds"
+    )
     .lean();
 
-  if (!p) return { hospital: [], caregivers: [], family: [], all: [] };
+  if (!p)
+    return { hospital: [], nurses: [], caregivers: [], family: [], all: [] };
 
-  // 2) Hospital admin (patient.createdBy)
+  // Hospital (owner)
   const hospital = p.createdBy ? [idToStr(p.createdBy)] : [];
 
-  // 3) Caregivers (array + primaryCaregiverId)
-  //  - caregivers can be array of userIds or subdocs => normalize to userId strings
+  // Caregivers (array/subdocs + primary)
   const cgSet = new Set();
   if (Array.isArray(p.caregivers)) {
     p.caregivers.forEach((c) => {
-      const uid = typeof c === "object" && c?.userId ? c.userId : c; // handle {userId:..} or direct id
+      const uid = typeof c === "object" && c?.userId ? c.userId : c;
       if (uid) cgSet.add(idToStr(uid));
     });
   }
   if (p.primaryCaregiverId) cgSet.add(idToStr(p.primaryCaregiverId));
   const caregivers = [...cgSet].filter(Boolean);
 
-  // 4) Family members
+  // Family
   const famSet = new Set();
   if (Array.isArray(p.familyMemberIds)) {
     p.familyMemberIds.forEach((f) => f && famSet.add(idToStr(f)));
   }
   const family = [...famSet].filter(Boolean);
 
-  // Optional: verify users actually exist & are active (role guards)
+  // Nurses
+  const nurseIds = Array.isArray(p.nurseIds)
+    ? p.nurseIds.map(idToStr).filter(Boolean)
+    : [];
+
+  // Role-guard helpers
   const keepIds = async (ids, roles) => {
     if (!ids.length) return [];
     const rows = await User.find({
@@ -49,16 +68,97 @@ export async function getPatientScopedRecipients(patientId) {
   };
 
   const hospitalOk = await keepIds(hospital, ["hospital"]);
+  const nursesOk = await keepIds(nurseIds, ["nurse"]);
   const caregiversOk = await keepIds(caregivers, ["caregiver"]);
   const familyOk = await keepIds(family, ["family"]);
 
-  // final unique
-  const all = [...new Set([...hospitalOk, ...caregiversOk, ...familyOk])];
+  const all = [
+    ...new Set([...hospitalOk, ...nursesOk, ...caregiversOk, ...familyOk]),
+  ];
 
   return {
     hospital: hospitalOk,
+    nurses: nursesOk,
     caregivers: caregiversOk,
     family: familyOk,
     all,
   };
 }
+
+// import mongoose from "mongoose";
+// import Patient from "../models/patientModel.js";
+// import User from "../models/userModel.js";
+
+// const idToStr = (v) => (v ? String(v) : null);
+
+// export async function getPatientDisplayName(patientId) {
+//   const p = await Patient.findById(patientId).select("patientUserId").lean();
+//   if (!p?.patientUserId) return "Patient";
+//   const u = await User.findById(p.patientUserId)
+//     .select("firstName lastName email")
+//     .lean();
+//   const name =
+//     [u?.firstName, u?.lastName].filter(Boolean).join(" ") ||
+//     u?.email ||
+//     "Patient";
+//   return name;
+// }
+
+// export async function getPatientScopedRecipients(patientId) {
+//   // 1) Load patient + minimal relations
+//   const p = await Patient.findById(patientId)
+//     .select("_id createdBy caregivers primaryCaregiverId familyMemberIds")
+//     .lean();
+
+//   if (!p) return { hospital: [], caregivers: [], family: [], all: [] };
+
+//   // 2) Hospital admin (patient.createdBy)
+//   const hospital = p.createdBy ? [idToStr(p.createdBy)] : [];
+
+//   // 3) Caregivers (array + primaryCaregiverId)
+//   //  - caregivers can be array of userIds or subdocs => normalize to userId strings
+//   const cgSet = new Set();
+//   if (Array.isArray(p.caregivers)) {
+//     p.caregivers.forEach((c) => {
+//       const uid = typeof c === "object" && c?.userId ? c.userId : c; // handle {userId:..} or direct id
+//       if (uid) cgSet.add(idToStr(uid));
+//     });
+//   }
+//   if (p.primaryCaregiverId) cgSet.add(idToStr(p.primaryCaregiverId));
+//   const caregivers = [...cgSet].filter(Boolean);
+
+//   // 4) Family members
+//   const famSet = new Set();
+//   if (Array.isArray(p.familyMemberIds)) {
+//     p.familyMemberIds.forEach((f) => f && famSet.add(idToStr(f)));
+//   }
+//   const family = [...famSet].filter(Boolean);
+
+//   // Optional: verify users actually exist & are active (role guards)
+//   const keepIds = async (ids, roles) => {
+//     if (!ids.length) return [];
+//     const rows = await User.find({
+//       _id: { $in: ids.map((i) => new mongoose.Types.ObjectId(i)) },
+//       isDeleted: { $ne: true },
+//       isActive: { $ne: false },
+//       ...(roles?.length ? { role: { $in: roles } } : {}),
+//     })
+//       .select("_id")
+//       .lean();
+//     return rows.map((r) => idToStr(r._id));
+//   };
+
+//   const hospitalOk = await keepIds(hospital, ["hospital"]);
+//   const caregiversOk = await keepIds(caregivers, ["caregiver"]);
+//   const familyOk = await keepIds(family, ["family"]);
+
+//   // final unique
+//   const all = [...new Set([...hospitalOk, ...caregiversOk, ...familyOk])];
+
+//   return {
+//     hospital: hospitalOk,
+//     caregivers: caregiversOk,
+//     family: familyOk,
+//     all,
+//   };
+// }

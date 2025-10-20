@@ -279,6 +279,99 @@ export const removeNotification = async (req, res) => {
   }
 };
 
+/**
+ * GET /api/notifications/ai-risk/daily
+ * Query:
+ *  - date=YYYY-MM-DD (optional; default: today, UTC day window)
+ *  - page (default 1)
+ *  - limit (default 20, max 100)
+ *  - patientId (optional: ek patient ke hisaab se filter)
+ */
+export const listDailyAIRisk = async (req, res) => {
+  try {
+    const userId = req.user?.id || req.user?._id;
+    if (!userId) return fail(res, "Unauthorized", 401);
+
+    // Pagination
+    const page = Math.max(1, parseInt(req.query.page || "1", 10));
+    const limit = Math.min(
+      100,
+      Math.max(1, parseInt(req.query.limit || "20", 10))
+    );
+    const skip = (page - 1) * limit;
+
+    // Parse date (UTC day)
+    const dateStr = (req.query.date || "").trim(); // YYYY-MM-DD
+    let startUTC;
+    if (dateStr) {
+      const d = new Date(dateStr);
+      if (isNaN(d)) return fail(res, "Invalid date (use YYYY-MM-DD)");
+      startUTC = new Date(
+        Date.UTC(
+          d.getUTCFullYear(),
+          d.getUTCMonth(),
+          d.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+    } else {
+      const now = new Date();
+      startUTC = new Date(
+        Date.UTC(
+          now.getUTCFullYear(),
+          now.getUTCMonth(),
+          now.getUTCDate(),
+          0,
+          0,
+          0,
+          0
+        )
+      );
+    }
+    const endUTC = new Date(startUTC.getTime() + 24 * 60 * 60 * 1000);
+
+    // Optional patient filter
+    const filter = {
+      userId,
+      type: "ai_risk",
+      isDeleted: { $ne: true },
+      createdAt: { $gte: startUTC, $lt: endUTC },
+    };
+    if (
+      req.query.patientId &&
+      mongoose.Types.ObjectId.isValid(req.query.patientId)
+    ) {
+      filter.patientId = new mongoose.Types.ObjectId(req.query.patientId);
+    }
+
+    const [items, total] = await Promise.all([
+      Notification.find(filter)
+        .sort({ createdAt: -1 })
+        .skip(skip)
+        .limit(limit)
+        .select("-__v")
+        .lean(),
+      Notification.countDocuments(filter),
+    ]);
+
+    return ok(res, "Daily AI risk notifications", {
+      date: startUTC.toISOString().slice(0, 10),
+      items,
+      page,
+      limit,
+      total,
+      totalPages: Math.ceil(total / limit),
+      hasMore: skip + items.length < total,
+    });
+  } catch (err) {
+    console.error("listDailyAIRisk error:", err);
+    return fail(res, "Failed to fetch daily AI risk notifications", 500);
+  }
+};
+
 // // controllers/notificationController.js
 // import { StatusCodes } from "http-status-codes";
 // import * as notificationService from "../services/notificationService.js";

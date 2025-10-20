@@ -6,6 +6,7 @@ import {
   markAllRead,
   acknowledge,
   removeNotification,
+  listDailyAIRisk,
 } from "../../controllers/notificationController.js";
 
 import { authenticate, authorize } from "../../middleware/authMiddleware.js";
@@ -27,6 +28,9 @@ router.post("/mark-all-read", markAllRead);
 
 // Soft delete
 router.delete("/:id", removeNotification);
+
+// Daily ai_risk listing
+router.get("/ai-risk/daily", listDailyAIRisk);
 
 export default router;
 
