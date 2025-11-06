@@ -414,7 +414,7 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
 
   let userIdsToShow = [];
 
-  // 👑 super admin: sab (khud ko chorh kar)
+  //super admin
   if (role === "super_admin") {
     const allUsers = await User.find({
       isActive: true,
@@ -427,7 +427,7 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
     return allUsers;
   }
 
-  // 🏥 hospital: apne create kiye hue users + jis super_admin ne hospital create kiya
+  // hospital
   else if (role === "hospital") {
     const usersCreated = await User.find({ createdBy: userId })
       .select("_id")
@@ -440,7 +440,9 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
     if (hospital?.createdBy) {
       userIdsToShow.push(hospital.createdBy.toString());
     }
-  } else if (role === "nurse") {
+  }
+  // nurse
+  else if (role === "nurse") {
     // Find all patients assigned to this nurse
     const patients = await Patient.find({ nurseIds: userId })
       .select("patientUserId primaryCaregiverId secondaryCaregiverIds")
@@ -449,7 +451,7 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
     // Collect all the patient IDs
     userIdsToShow = patients
       .map((p) => p.patientUserId)
-      .filter((id) => id && id.toString()) // filter out null/empty IDs
+      .filter((id) => id && id.toString())
       .map((id) => id.toString());
 
     // Collect caregivers associated with the patients
@@ -489,7 +491,7 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
     userIdsToShow = userIdsToShow.filter((id) => id && id.toString());
   }
 
-  // 🧑‍🦽 caregiver: jinko assign hai wohi patients
+  // caregiver
   else if (role === "caregiver") {
     const patients = await Patient.find({
       $or: [{ primaryCaregiverId: userId }, { secondaryCaregiverIds: userId }],
@@ -498,11 +500,10 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
       .lean();
     userIdsToShow = patients
       .map((p) => p.patientUserId)
-      .filter((id) => id && id.toString()) // filter out null/empty IDs
+      .filter((id) => id && id.toString())
       .map((id) => id.toString());
   }
-
-  // 🧑‍🤝‍🧑 patient: apni assigned nurse(s), caregiver(s), family members
+  // patient
   else if (role === "patient") {
     const patient = await Patient.findOne({ patientUserId: userId })
       .select(
@@ -511,31 +512,100 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
       .lean();
 
     if (patient) {
-      const {
-        nurseIds = [],
-        primaryCaregiverId = null,
-        secondaryCaregiverIds = [],
-        familyMemberIds = [],
-      } = patient;
-
-      // collect sab ids (nulls clean + string me convert)
       const collected = [
-        ...nurseIds,
-        primaryCaregiverId,
-        ...(secondaryCaregiverIds || []),
-        ...(familyMemberIds || []),
+        ...(patient.nurseIds || []),
+        patient.primaryCaregiverId,
+        ...(patient.secondaryCaregiverIds || []),
+        ...(patient.familyMemberIds || []),
       ]
-        .filter((id) => id && id.toString()) // filter out null/empty IDs
+        .filter(Boolean)
         .map((id) => id.toString());
 
       userIdsToShow = collected;
-    } else {
-      // agar patient profile hi na mile to empty list
-      userIdsToShow = [];
     }
   }
 
-  // ❌ koi aur role
+  // family
+  else if (role === "family") {
+    // find which patient(s) this family user is attached to
+    const familyRelations = await FamilyMember.find({
+      familyMemberUserId: userId,
+    })
+      .select("patientId")
+      .lean();
+
+    if (familyRelations.length) {
+      for (const relation of familyRelations) {
+        const patient = await Patient.findById(relation.patientId)
+          .select(
+            "patientUserId primaryCaregiverId secondaryCaregiverIds nurseIds hospitalId"
+          )
+          .lean();
+
+        if (!patient) continue;
+
+        // add the patient
+        if (patient.patientUserId)
+          userIdsToShow.push(patient.patientUserId.toString());
+
+        // add caregivers
+        if (patient.primaryCaregiverId)
+          userIdsToShow.push(patient.primaryCaregiverId.toString());
+        if (patient.secondaryCaregiverIds?.length)
+          patient.secondaryCaregiverIds.forEach(
+            (id) => id && userIdsToShow.push(id.toString())
+          );
+
+        // add nurses
+        if (patient.nurseIds?.length)
+          patient.nurseIds.forEach(
+            (id) => id && userIdsToShow.push(id.toString())
+          );
+
+        // add hospital (creator)
+        if (patient.hospitalId) {
+          const hospital = await Hospital.findById(patient.hospitalId)
+            .select("hospitalUserId")
+            .lean();
+          if (hospital?.hospitalUserId) {
+            userIdsToShow.push(hospital.hospitalUserId.toString());
+          }
+        }
+      }
+    }
+  }
+
+  // // 🧑‍🤝‍🧑 patient: apni assigned nurse(s), caregiver(s), family members
+  // else if (role === "patient") {
+  //   const patient = await Patient.findOne({ patientUserId: userId })
+  //     .select(
+  //       "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds"
+  //     )
+  //     .lean();
+
+  //   if (patient) {
+  //     const {
+  //       nurseIds = [],
+  //       primaryCaregiverId = null,
+  //       secondaryCaregiverIds = [],
+  //       familyMemberIds = [],
+  //     } = patient;
+
+  //     // collect sab ids (nulls clean + string me convert)
+  //     const collected = [
+  //       ...nurseIds,
+  //       primaryCaregiverId,
+  //       ...(secondaryCaregiverIds || []),
+  //       ...(familyMemberIds || []),
+  //     ]
+  //       .filter((id) => id && id.toString())
+  //       .map((id) => id.toString());
+
+  //     userIdsToShow = collected;
+  //   } else {
+  //     userIdsToShow = [];
+  //   }
+  // }
   else {
     throw {
       statusCode: 403,

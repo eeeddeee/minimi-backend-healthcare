@@ -49,6 +49,7 @@ app.use(helmet());
 const allowedOrigins = [
   "*",
   "http://localhost:5173",
+  "http://localhost:8081",
   "https://minimi-healthcare.onrender.com",
   "https://minimi-healthcare.onrender.com/login",
   "ws://localhost:*",

@@ -36,6 +36,7 @@ export const initSocket = (httpServer) => {
         "*",
         "https://minimi-healthcare.onrender.com",
         "http://localhost:5173",
+        "http://localhost:8081",
         "https://minimi-frontend-healthcare.vercel.app",
       ];
 
