@@ -4,6 +4,7 @@ import { uploadBufferToS3 } from "../utils/s3Service.js";
 import * as userService from "../services/userService.js";
 import Nurse from "../models/nurseModel.js";
 import Caregiver from "../models/caregiverModel.js";
+import FamilyMember from "../models/familyModel.js";
 import Hospital from "../models/hospitalModel.js";
 import mongoose from "mongoose";
 
@@ -113,6 +114,45 @@ export const getCaregiverPatients = async (req, res) => {
       StatusCodes.OK
     );
   } catch (error) {
+    return res
+      .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+      .json({ success: false, message: error.message });
+  }
+};
+
+export const getFamilyMemberPatients = async (req, res) => {
+  try {
+    const { page, limit, isActive, search } = req.query;
+
+    const familyUserId = req.user?._id;
+    let familyDocId = null;
+
+    if (mongoose.Types.ObjectId.isValid(familyUserId)) {
+      const familyDoc = await FamilyMember.findOne(
+        { familyMemberUserId: new mongoose.Types.ObjectId(familyUserId) },
+        { _id: 1 }
+      ).lean();
+      familyDocId = familyDoc?._id || null;
+    }
+
+    const filters = {};
+    if (isActive !== undefined) filters.isActive = isActive;
+    if (search) filters.search = search;
+
+    const result = await patientService.getPatientsForFamilyMember(
+      filters,
+      parseInt(page),
+      parseInt(limit),
+      [familyUserId, familyDocId].filter(Boolean)
+    );
+
+    return res.success(
+      "Patients fetched successfully.",
+      result,
+      StatusCodes.OK
+    );
+  } catch (error) {
+    console.error("getFamilyMemberPatients error:", error);
     return res
       .status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
       .json({ success: false, message: error.message });
