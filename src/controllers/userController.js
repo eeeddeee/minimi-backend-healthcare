@@ -33,7 +33,6 @@ export const registerHospitalAdmin = async (req, res) => {
   const session = await mongoose.startSession();
   session.startTransaction();
   try {
-    // 1. Create user in transaction
     const { user, randomPassword } = await userService.createHospitalAdmin(
       req.body,
       req.user._id,
@@ -45,26 +44,22 @@ export const registerHospitalAdmin = async (req, res) => {
       hospitalUserId: user.id || user._id,
     };
 
-    // console.log("User returned:", user);
-    // console.log("Hospital data:", hospitalData);
-
-    // 2. Create hospital in transaction
     const hospital = await hospitalService.createHospital(
       hospitalData,
       req.user.id,
       session
     );
 
-    await session.commitTransaction();
-    session.endSession();
-
+    // Send email BEFORE committing transaction
     const loginUrl = process.env.LOGIN_URL;
     const template = hospitalAdminTemplate;
     await sendEmail({
       to: user.email,
-      subject: `Your Hospital Admin Account Credentials`,
+      subject: "Your Hospital Admin Account Credentials",
       html: template(user.email, randomPassword, loginUrl),
     });
+
+    await session.commitTransaction();
 
     return res.success(
       "Hospital admin registered successfully.",
@@ -72,9 +67,13 @@ export const registerHospitalAdmin = async (req, res) => {
       StatusCodes.CREATED
     );
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    // only abort if transaction is still active
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     return errorResponse(res, error);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -104,9 +103,6 @@ export const registerNurse = async (req, res) => {
       session
     );
 
-    await session.commitTransaction();
-    session.endSession();
-
     const loginUrl = process.env.LOGIN_URL;
     const template = nurseTemplate;
     await sendEmail({
@@ -115,15 +111,21 @@ export const registerNurse = async (req, res) => {
       html: template(user.email, randomPassword, loginUrl),
     });
 
+    await session.commitTransaction();
+
     return res.success(
       "Nurse registered successfully.",
       { user, nurse },
       StatusCodes.CREATED
     );
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    // only abort if transaction is still active
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     return errorResponse(res, error);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -152,9 +154,6 @@ export const registerCaregiver = async (req, res) => {
       session
     );
 
-    await session.commitTransaction();
-    session.endSession();
-
     const loginUrl = process.env.LOGIN_URL;
     const template = caregiverTemplate;
     await sendEmail({
@@ -163,15 +162,20 @@ export const registerCaregiver = async (req, res) => {
       html: template(user.email, randomPassword, loginUrl),
     });
 
+    await session.commitTransaction();
+
     return res.success(
       "Caregiver registered successfully.",
       { user, caregiver },
       StatusCodes.CREATED
     );
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     return errorResponse(res, error);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -205,9 +209,6 @@ export const registerPatient = async (req, res) => {
       session
     );
 
-    await session.commitTransaction();
-    session.endSession();
-
     const loginUrl = process.env.LOGIN_URL;
     const template = patientTemplate;
     await sendEmail({
@@ -216,15 +217,20 @@ export const registerPatient = async (req, res) => {
       html: template(user.email, randomPassword, loginUrl),
     });
 
+    await session.commitTransaction();
+
     return res.success(
       "Patient registered successfully.",
       { user, patient },
       StatusCodes.CREATED
     );
   } catch (error) {
-    await session.abortTransaction();
-    session.endSession();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     return errorResponse(res, error);
+  } finally {
+    session.endSession();
   }
 };
 
@@ -278,15 +284,12 @@ export const registerFamilyMember = async (req, res) => {
       session
     );
 
-    // 5. Add family member to patient
     await patientService.addFamilyMember(
       patient._id, // Use the patientId directly here
       user._id,
       req.user._id,
       session
     );
-
-    await session.commitTransaction();
 
     // Send email
     const loginUrl = process.env.LOGIN_URL;
@@ -296,13 +299,17 @@ export const registerFamilyMember = async (req, res) => {
       html: familyMemberTemplate(user.email, randomPassword, loginUrl),
     });
 
+    await session.commitTransaction();
+
     return res.success(
       "Family member registered successfully.",
       { user, familyMember },
       StatusCodes.CREATED
     );
   } catch (error) {
-    await session.abortTransaction();
+    if (session.inTransaction()) {
+      await session.abortTransaction();
+    }
     return errorResponse(res, error);
   } finally {
     session.endSession();
