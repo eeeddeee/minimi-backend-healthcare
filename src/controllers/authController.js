@@ -1,5 +1,6 @@
 import { StatusCodes } from "http-status-codes";
 import * as authService from "../services/authService.js";
+import Patient from "../models/patientModel.js";
 
 // export const login = async (req, res) => {
 //   try {
@@ -107,6 +108,61 @@ export const webLogin = async (req, res) => {
   }
 };
 
+// export const mobileLogin = async (req, res) => {
+//   try {
+//     const { email, password } = req.body;
+//     const ipAddress = req.ip;
+//     const userAgent = req.headers["user-agent"];
+
+//     const { token, user } = await authService.loginUser(
+//       email,
+//       password,
+//       ipAddress,
+//       userAgent
+//     );
+
+//     if (!MOBILE_ROLES.includes(user.role)) {
+//       return res.status(StatusCodes.FORBIDDEN).json({
+//         success: false,
+//         message: "This account is not allowed to access mobile login.",
+//       });
+//     }
+
+//     return res.success(
+//       "Mobile user login successful.",
+//       {
+//         id: user._id,
+//         email: user.email,
+//         role: user.role,
+//         firstName: user.firstName,
+//         lastName: user.lastName,
+//         languagePreference: user.languagePreference,
+//         profile_image: user.profile_image,
+//         phone: user.phone,
+//         address: {
+//           street: user.street,
+//           city: user.city,
+//           state: user.state,
+//           postalCode: user.postalCode,
+//           country: user.country,
+//         },
+//         dateOfBirth: user.dateOfBirth,
+//         gender: user.gender,
+//         isPayment: user.isPayment,
+//         subscription: user.subscription,
+//         token,
+//       },
+//       StatusCodes.OK
+//     );
+//   } catch (err) {
+//     return res
+//       .status(err.statusCode || StatusCodes.INTERNAL_SERVER_ERROR)
+//       .json({
+//         success: false,
+//         message: err.message || "Authentication failed",
+//       });
+//   }
+// };
 export const mobileLogin = async (req, res) => {
   try {
     const { email, password } = req.body;
@@ -127,10 +183,24 @@ export const mobileLogin = async (req, res) => {
       });
     }
 
+    // 👇👇 Fetch patient record if role is patient
+    let patientId = null;
+
+    if (user.role === "patient") {
+      const patient = await Patient.findOne({ patientUserId: user._id }).select(
+        "_id"
+      );
+
+      if (patient) {
+        patientId = patient._id;
+      }
+    }
+
     return res.success(
       "Mobile user login successful.",
       {
         id: user._id,
+        patientId,
         email: user.email,
         role: user.role,
         firstName: user.firstName,
