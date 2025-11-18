@@ -14,12 +14,18 @@ const errorResponse = (res, error, fallback) =>
 // POST /messages/threads
 export const createThread = async (req, res) => {
   try {
-    // creator must have access to patient & be allowed role (route enforces role, here patient access)
-    // await ensureAccessToPatient(req.user, req.body.patientId);
+    const { subject, participantUserIds } = req.body;
+
+    if (!participantUserIds || !Array.isArray(participantUserIds)) {
+      return res.status(StatusCodes.BAD_REQUEST).json({
+        success: false,
+        message: "participantUserIds is required and must be an array",
+      });
+    }
 
     const thread = await messagingService.createThread({
-      subject: req.body.subject,
-      participantUserIds: req.body.participantUserIds,
+      subject,
+      participantUserIds,
       creatorId: req.user._id,
     });
 
@@ -29,9 +35,36 @@ export const createThread = async (req, res) => {
       StatusCodes.CREATED
     );
   } catch (error) {
+    if (error.statusCode === StatusCodes.CONFLICT) {
+      return res.status(StatusCodes.CONFLICT).json({
+        success: false,
+        message: error.message,
+        existingConversationId: error.existingConversationId,
+      });
+    }
     return errorResponse(res, error, "Failed to create conversation");
   }
 };
+// export const createThread = async (req, res) => {
+//   try {
+//     // creator must have access to patient & be allowed role (route enforces role, here patient access)
+//     // await ensureAccessToPatient(req.user, req.body.patientId);
+
+//     const thread = await messagingService.createThread({
+//       subject: req.body.subject,
+//       participantUserIds: req.body.participantUserIds,
+//       creatorId: req.user._id,
+//     });
+
+//     return res.success(
+//       "Conversation created successfully.",
+//       { thread },
+//       StatusCodes.CREATED
+//     );
+//   } catch (error) {
+//     return errorResponse(res, error, "Failed to create conversation");
+//   }
+// };
 
 // GET /messages/threads
 export const listThreads = async (req, res) => {

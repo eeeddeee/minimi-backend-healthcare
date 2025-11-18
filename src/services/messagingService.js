@@ -13,14 +13,44 @@ import FamilyMember from "../models/familyModel.js";
 import { notifyUsers } from "../utils/notify.js";
 
 // Create thread
+
 export const createThread = async ({
   subject,
   participantUserIds,
   creatorId,
 }) => {
-  const set = new Set(participantUserIds.map(String));
-  set.add(String(creatorId));
-  const participants = Array.from(set).map((uid) => ({
+  // Create sorted participant set for comparison
+  const allParticipantIds = [...participantUserIds, creatorId].map(String);
+  const sortedParticipants = [...new Set(allParticipantIds)].sort();
+
+  // Check if conversation already exists with exact same participants
+  const existingConversation = await Conversation.findOne({
+    "participants.userId": { $all: sortedParticipants },
+    $expr: {
+      $eq: [{ $size: "$participants" }, sortedParticipants.length],
+    },
+  }).lean();
+
+  if (existingConversation) {
+    // Check if conversation is not deleted/archived
+    if (!existingConversation.isDeleted && !existingConversation.isArchived) {
+      throw {
+        statusCode: StatusCodes.CONFLICT,
+        message: "Conversation already exists with these participants.",
+        existingConversationId: existingConversation._id,
+      };
+    } else {
+      // If deleted/archived, restore it
+      await Conversation.findByIdAndUpdate(existingConversation._id, {
+        isDeleted: false,
+        isArchived: false,
+        updatedAt: new Date(),
+      });
+      return existingConversation;
+    }
+  }
+
+  const participants = sortedParticipants.map((uid) => ({
     userId: uid,
     lastReadAt: null,
   }));
@@ -43,6 +73,36 @@ export const createThread = async ({
 
   return saved;
 };
+// export const createThread = async ({
+//   subject,
+//   participantUserIds,
+//   creatorId,
+// }) => {
+//   const set = new Set(participantUserIds.map(String));
+//   set.add(String(creatorId));
+//   const participants = Array.from(set).map((uid) => ({
+//     userId: uid,
+//     lastReadAt: null,
+//   }));
+
+//   const convo = await Conversation.create([
+//     {
+//       subject: subject || "",
+//       participants,
+//     },
+//   ]);
+
+//   const saved = convo[0].toObject();
+
+//   await SystemLog.create({
+//     action: "conversation_created",
+//     entityType: "Conversation",
+//     entityId: saved._id,
+//     performedBy: creatorId,
+//   });
+
+//   return saved;
+// };
 
 export const listThreads = async ({ userId, page = 1, limit = 10 }) => {
   const q = { "participants.userId": userId, isArchived: false };
