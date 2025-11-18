@@ -490,39 +490,93 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
     // Ensure all userIdsToShow are valid and non-empty
     userIdsToShow = userIdsToShow.filter((id) => id && id.toString());
   }
-
   // caregiver
   else if (role === "caregiver") {
+    // Find the caregiver record to get assigned nurseId
+    const caregiver = await Caregiver.findOne({ caregiverUserId: userId })
+      .select("createdBy nurseId")
+      .lean();
+
+    // Find all patients assigned to this caregiver
     const patients = await Patient.find({
       $or: [{ primaryCaregiverId: userId }, { secondaryCaregiverIds: userId }],
     })
-      .select("patientUserId")
+      .select("patientUserId hospitalId")
       .lean();
+
+    // Collect patient user IDs
     userIdsToShow = patients
       .map((p) => p.patientUserId)
       .filter((id) => id && id.toString())
       .map((id) => id.toString());
+
+    // Add ONLY the assigned nurse
+    if (caregiver?.nurseId) {
+      userIdsToShow.push(caregiver.nurseId.toString());
+    }
+
+    // Add hospital user who created the caregiver
+    if (caregiver?.createdBy) {
+      userIdsToShow.push(caregiver.createdBy.toString());
+    }
+
+    // Find family members of all assigned patients
+    for (const patient of patients) {
+      if (patient._id) {
+        const familyMembers = await FamilyMember.find({
+          patientId: patient._id,
+        })
+          .select("familyMemberUserId")
+          .lean();
+
+        familyMembers.forEach((family) => {
+          if (family.familyMemberUserId) {
+            userIdsToShow.push(family.familyMemberUserId.toString());
+          }
+        });
+      }
+    }
+
+    // Remove duplicates and ensure valid IDs
+    userIdsToShow = [...new Set(userIdsToShow)].filter(
+      (id) => id && id.toString()
+    );
   }
+
   // patient
   else if (role === "patient") {
     const patient = await Patient.findOne({ patientUserId: userId })
       .select(
-        "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds"
+        "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds createdBy"
       )
       .lean();
 
     if (patient) {
       const collected = [
         ...(patient.nurseIds || []),
-        patient.primaryCaregiverId,
+        ...(patient.primaryCaregiverId || []),
         ...(patient.secondaryCaregiverIds || []),
         ...(patient.familyMemberIds || []),
       ]
-        .filter(Boolean)
+        .filter((id) => id && id.toString().length > 0)
         .map((id) => id.toString());
 
       userIdsToShow = collected;
+
+      // Use createdBy directly - yeh hospital user ID hai
+      if (patient.createdBy && patient.createdBy.toString()) {
+        userIdsToShow.push(patient.createdBy.toString());
+        console.log(
+          "Added hospital user via createdBy:",
+          patient.createdBy.toString()
+        );
+      }
     }
+
+    // Remove any empty/null IDs
+    userIdsToShow = userIdsToShow.filter(
+      (id) => id && id.toString() && id.toString().length > 0
+    );
   }
 
   // family
@@ -538,75 +592,54 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
       for (const relation of familyRelations) {
         const patient = await Patient.findById(relation.patientId)
           .select(
-            "patientUserId primaryCaregiverId secondaryCaregiverIds nurseIds hospitalId"
+            "patientUserId primaryCaregiverId secondaryCaregiverIds nurseIds createdBy"
           )
           .lean();
 
         if (!patient) continue;
 
         // add the patient
-        if (patient.patientUserId)
+        if (patient.patientUserId) {
           userIdsToShow.push(patient.patientUserId.toString());
+        }
 
         // add caregivers
-        if (patient.primaryCaregiverId)
+        if (patient.primaryCaregiverId) {
           userIdsToShow.push(patient.primaryCaregiverId.toString());
-        if (patient.secondaryCaregiverIds?.length)
-          patient.secondaryCaregiverIds.forEach(
-            (id) => id && userIdsToShow.push(id.toString())
-          );
+        }
+        if (patient.secondaryCaregiverIds?.length) {
+          patient.secondaryCaregiverIds.forEach((id) => {
+            if (id && id.toString()) {
+              userIdsToShow.push(id.toString());
+            }
+          });
+        }
 
         // add nurses
-        if (patient.nurseIds?.length)
-          patient.nurseIds.forEach(
-            (id) => id && userIdsToShow.push(id.toString())
-          );
+        if (patient.nurseIds?.length) {
+          patient.nurseIds.forEach((id) => {
+            if (id && id.toString()) {
+              userIdsToShow.push(id.toString());
+            }
+          });
+        }
 
-        // add hospital (creator)
-        if (patient.hospitalId) {
-          const hospital = await Hospital.findById(patient.hospitalId)
-            .select("hospitalUserId")
-            .lean();
-          if (hospital?.hospitalUserId) {
-            userIdsToShow.push(hospital.hospitalUserId.toString());
-          }
+        // add hospital from patient
+        if (patient.createdBy && patient.createdBy.toString()) {
+          userIdsToShow.push(patient.createdBy.toString());
+          console.log(
+            "Added hospital user via createdBy:",
+            patient.createdBy.toString()
+          );
         }
       }
     }
-  }
 
-  // // 🧑‍🤝‍🧑 patient: apni assigned nurse(s), caregiver(s), family members
-  // else if (role === "patient") {
-  //   const patient = await Patient.findOne({ patientUserId: userId })
-  //     .select(
-  //       "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds"
-  //     )
-  //     .lean();
-
-  //   if (patient) {
-  //     const {
-  //       nurseIds = [],
-  //       primaryCaregiverId = null,
-  //       secondaryCaregiverIds = [],
-  //       familyMemberIds = [],
-  //     } = patient;
-
-  //     // collect sab ids (nulls clean + string me convert)
-  //     const collected = [
-  //       ...nurseIds,
-  //       primaryCaregiverId,
-  //       ...(secondaryCaregiverIds || []),
-  //       ...(familyMemberIds || []),
-  //     ]
-  //       .filter((id) => id && id.toString())
-  //       .map((id) => id.toString());
-
-  //     userIdsToShow = collected;
-  //   } else {
-  //     userIdsToShow = [];
-  //   }
-  // }
-  else {
+    // Remove any empty/null IDs before proceeding
+    userIdsToShow = userIdsToShow.filter(
+      (id) => id && id.toString() && id.toString().length > 0
+    );
+  } else {
     throw {
       statusCode: 403,
       message: "You do not have permission to view user list for chat.",
@@ -628,753 +661,3 @@ export const getAvailableUsersForChat = async (loggedInUser) => {
 
   return users;
 };
-
-// export const postMessage = async ({
-//   conversationId,
-//   senderId,
-//   content,
-//   attachments = []
-// }) => {
-//   const convo = await Conversation.findById(conversationId)
-//     .select("participants")
-//     .lean();
-
-//   if (!convo)
-//     throw {
-//       statusCode: StatusCodes.NOT_FOUND,
-//       message: "Conversation not found"
-//     };
-
-//   // Find the receiver (the other participant)
-//   const participants = convo.participants.map((p) => p.userId.toString());
-//   const otherParticipants = participants.filter(
-//     (id) => id !== senderId.toString()
-//   );
-
-//   if (otherParticipants.length === 0) {
-//     throw {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       message: "No other participants found in conversation"
-//     };
-//   }
-
-//   const receiverId = otherParticipants[0];
-
-//   const msg = await Message.create([
-//     {
-//       conversationId,
-//       senderId,
-//       receiverId,
-//       content:
-//         content || (attachments.length ? "(attachment)" : "(no content)"),
-//       attachments,
-//       isRead: false
-//     }
-//   ]);
-
-//   const saved = msg[0].toObject();
-
-//   // Update conversation last message metadata
-//   await Conversation.findByIdAndUpdate(conversationId, {
-//     $set: {
-//       lastMessageAt: new Date(),
-//       lastMessagePreview: content ? content.slice(0, 200) : "(attachment)"
-//     },
-//     $currentDate: { updatedAt: true }
-//   });
-
-//   await SystemLog.create({
-//     action: "message_sent",
-//     entityType: "Message",
-//     entityId: saved._id,
-//     performedBy: senderId,
-//     metadata: { conversationId, attachmentsCount: attachments.length }
-//   });
-
-//   return saved;
-// };
-
-// export const postMessage = async ({
-//   conversationId,
-//   senderId,
-//   content,
-//   attachments = []
-// }) => {
-//   const convo = await Conversation.findById(conversationId)
-//     .select("participants")
-//     .lean();
-
-//   if (!convo)
-//     throw {
-//       statusCode: StatusCodes.NOT_FOUND,
-//       message: "Conversation not found"
-//     };
-
-//   // Find the receiver (the other participant)
-//   const participants = convo.participants.map((p) => p.userId.toString());
-//   const otherParticipants = participants.filter(
-//     (id) => id !== senderId.toString()
-//   );
-
-//   if (otherParticipants.length === 0) {
-//     throw {
-//       statusCode: StatusCodes.BAD_REQUEST,
-//       message: "No other participants found in conversation"
-//     };
-//   }
-
-//   const receiverId = otherParticipants[0];
-
-//   const msg = await Message.create([
-//     {
-//       conversationId,
-//       senderId,
-//       receiverId,
-//       content:
-//         content || (attachments.length ? "(attachment)" : "(no content)"),
-//       attachments,
-//       isRead: false
-//     }
-//   ]);
-
-//   const saved = msg[0].toObject();
-
-//   // Update conversation last message metadata
-//   await Conversation.findByIdAndUpdate(conversationId, {
-//     $set: {
-//       lastMessageAt: new Date(),
-//       lastMessagePreview: content ? content.slice(0, 200) : "(attachment)"
-//     },
-//     $currentDate: { updatedAt: true }
-//   });
-
-//   // Send real-time notifications via Socket.IO
-//   try {
-//     // Notify all users in the conversation room
-//     emitToConversation(conversationId, "new-message", {
-//       message: saved,
-//       conversationId
-//     });
-
-//     // Also notify all participants individually
-//     const participantIds = convo.participants.map((p) => p.userId.toString());
-//     emitToUsers(participantIds, "message-notification", {
-//       message: saved,
-//       conversationId
-//     });
-//   } catch (socketError) {
-//     console.error("Socket notification failed:", socketError);
-//   }
-
-//   await SystemLog.create({
-//     action: "message_sent",
-//     entityType: "Message",
-//     entityId: saved._id,
-//     performedBy: senderId,
-//     metadata: { conversationId, attachmentsCount: attachments.length }
-//   });
-
-//   return saved;
-// };
-
-// export const getAvailableUsersForChat = async (loggedInUser) => {
-//   const userId = loggedInUser._id;
-//   const role = loggedInUser.role;
-
-//   let userIdsToShow = [];
-
-//   // super admin: sab (khud ko chorh kar)
-//   if (role === "super_admin") {
-//     const allUsers = await User.find({
-//       isActive: true,
-//       _id: { $ne: userId }
-//     })
-//       .select(
-//         "_id email firstName lastName role profile_image socketId lastSeen online"
-//       )
-//       .lean();
-//     return allUsers;
-//   }
-
-//   // hospital: apne create kiye hue users + jis super_admin ne hospital create kiya
-//   else if (role === "hospital") {
-//     const usersCreated = await User.find({ createdBy: userId })
-//       .select("_id")
-//       .lean();
-//     userIdsToShow = usersCreated.map((u) => u._id.toString());
-
-//     const hospital = await Hospital.findOne({ hospitalUserId: userId })
-//       .select("createdBy")
-//       .lean();
-//     if (hospital?.createdBy) {
-//       userIdsToShow.push(hospital.createdBy.toString());
-//     }
-//   }
-
-//   // nurse: jinko assign hai wohi patients
-//   else if (role === "nurse") {
-//     const patients = await Patient.find({ nurseIds: userId })
-//       .select("patientUserId")
-//       .lean();
-//     userIdsToShow = patients
-//       .map((p) => p.patientUserId)
-//       .filter(Boolean)
-//       .map((id) => id.toString());
-//   }
-
-//   // caregiver: jinko assign hai wohi patients
-//   else if (role === "caregiver") {
-//     const patients = await Patient.find({
-//       $or: [{ primaryCaregiverId: userId }, { secondaryCaregiverIds: userId }]
-//     })
-//       .select("patientUserId")
-//       .lean();
-//     userIdsToShow = patients
-//       .map((p) => p.patientUserId)
-//       .filter(Boolean)
-//       .map((id) => id.toString());
-//   }
-
-//   // patient: apni assigned nurse(s), caregiver(s), family members
-//   else if (role === "patient") {
-//     const patient = await Patient.findOne({ patientUserId: userId })
-//       .select(
-//         "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds"
-//       )
-//       .lean();
-
-//     if (patient) {
-//       const {
-//         nurseIds = [],
-//         primaryCaregiverId = null,
-//         secondaryCaregiverIds = [],
-//         familyMemberIds = []
-//       } = patient;
-
-//       // collect sab ids (nulls clean + string me convert)
-//       const collected = [
-//         ...nurseIds,
-//         primaryCaregiverId,
-//         ...(secondaryCaregiverIds || []),
-//         ...(familyMemberIds || [])
-//       ]
-//         .filter(Boolean)
-//         .map((id) => id.toString());
-
-//       userIdsToShow = collected;
-//     } else {
-//       // agar patient profile hi na mile to empty list
-//       userIdsToShow = [];
-//     }
-//   }
-
-//   else {
-//     throw {
-//       statusCode: 403,
-//       message: "You do not have permission to view user list for chat."
-//     };
-//   }
-
-//   if (!userIdsToShow.length) return [];
-
-//   const uniqueUserIds = [...new Set(userIdsToShow)];
-
-//   // final fetch (khud ko exclude)
-//   const users = await User.find({
-//     _id: { $in: uniqueUserIds, $ne: userId }
-//   })
-//     .select(
-//       "_id email firstName lastName role profile_image socketId lastSeen online"
-//     )
-//     .lean();
-
-//   return users;
-// };
-
-// export const getAvailableUsersForChat = async (loggedInUser) => {
-//   const userId = loggedInUser._id;
-//   const role = loggedInUser.role;
-
-//   let userIdsToShow = [];
-
-//   // Super Admin: See all users
-//   if (role === "super_admin") {
-//     const allUsers = await User.find({
-//       isActive: true,
-//       _id: { $ne: userId }
-//     })
-//       .select(
-//         "_id email firstName lastName role profile_image socketId lastSeen online"
-//       )
-//       .lean();
-//     return allUsers;
-//   }
-
-//   // Hospital: See users created by this hospital
-//   else if (role === "hospital") {
-//     const usersCreated = await User.find({ createdBy: userId })
-//       .select("_id")
-//       .lean();
-//     userIdsToShow = usersCreated.map((u) => u._id.toString());
-
-//     // Get who created this hospital
-//     const hospital = await Hospital.findOne({ hospitalUserId: userId })
-//       .select("createdBy")
-//       .lean();
-//     if (hospital?.createdBy) {
-//       userIdsToShow.push(hospital.createdBy.toString());
-//     }
-//   }
-
-//   //  Nurse: See patients assigned to this nurse
-//   else if (role === "nurse") {
-//     const patients = await Patient.find({ nurseIds: userId })
-//       .select("patientUserId")
-//       .lean();
-//     userIdsToShow = patients.map((p) => p.patientUserId.toString());
-//   }
-
-//   // Caregiver: See patients assigned to this caregiver
-//   else if (role === "caregiver") {
-//     const patients = await Patient.find({
-//       $or: [{ primaryCaregiverId: userId }, { secondaryCaregiverIds: userId }]
-//     })
-//       .select("patientUserId")
-//       .lean();
-//     userIdsToShow = patients.map((p) => p.patientUserId.toString());
-//   }
-
-//   // 🧑‍🤝‍🧑 patient: apni assigned nurse(s), caregiver(s), family members
-//   else if (role === "patient") {
-//     const patient = await Patient.findOne({ patientUserId: userId })
-//       .select(
-//         "nurseIds primaryCaregiverId secondaryCaregiverIds familyMemberIds"
-//       )
-//       .lean();
-
-//     if (patient) {
-//       const {
-//         nurseIds = [],
-//         primaryCaregiverId = null,
-//         secondaryCaregiverIds = [],
-//         familyMemberIds = []
-//       } = patient;
-
-//       // collect sab ids (nulls clean + string me convert)
-//       const collected = [
-//         ...nurseIds,
-//         primaryCaregiverId,
-//         ...(secondaryCaregiverIds || []),
-//         ...(familyMemberIds || [])
-//       ]
-//         .filter(Boolean)
-//         .map((id) => id.toString());
-
-//       userIdsToShow = collected;
-//     } else {
-//       // agar patient profile hi na mile to empty list
-//       userIdsToShow = [];
-//     }
-//   }
-
-//   // Any other role: Access denied
-//   else {
-//     throw {
-//       statusCode: 403,
-//       message: "You do not have permission to view user list for chat."
-//     };
-//   }
-
-//   //  Fetch users if list isn't empty
-//   if (userIdsToShow.length === 0) return [];
-
-//   const uniqueUserIds = [...new Set(userIdsToShow)];
-
-//   const users = await User.find({ _id: { $in: uniqueUserIds } })
-//     .select(
-//       "_id email firstName lastName role profile_image socketId lastSeen online"
-//     )
-//     .lean();
-
-//   return users;
-// };
-
-//   let associatedUserIds = new Set();
-
-//   try {
-//     switch (userRole) {
-//       case "super_admin":
-//         // Super admin can see all users
-//         const allUsers = await User.find({ isActive: true })
-//           .select("_id firstName lastName role profile_image online lastSeen socketId")
-//           .lean();
-//         return allUsers;
-
-//       case "hospital":
-//         // Hospital user can see all users in their hospital
-//         const hospital = await Hospital.findOne({ hospitalUserId: userId });
-//         if (!hospital) return [];
-
-//         // Get all users belonging to this hospital
-//         // Nurses in this hospital
-//         const hospitalNurses = await Nurse.find({ hospitalId: hospital._id })
-//           .select("nurseUserId")
-//           .lean();
-//         hospitalNurses.forEach(nurse => associatedUserIds.add(nurse.nurseUserId.toString()));
-
-//         // Patients in this hospital
-//         const hospitalPatients = await Patient.find({ hospitalId: hospital._id })
-//           .select("patientUserId")
-//           .lean();
-//         hospitalPatients.forEach(patient => associatedUserIds.add(patient.patientUserId.toString()));
-
-//         // Caregivers in this hospital
-//         const hospitalCaregivers = await Caregiver.find({ hospitalId: hospital._id })
-//           .select("caregiverUserId")
-//           .lean();
-//         hospitalCaregivers.forEach(caregiver => associatedUserIds.add(caregiver.caregiverUserId.toString()));
-
-//         break;
-
-//       case "nurse":
-//         // Nurse can see their patients and assigned caregivers
-//         const nurse = await Nurse.findOne({ nurseUserId: userId });
-//         if (!nurse) return [];
-
-//         // Get patients assigned to this nurse
-//         const nursePatients = await Patient.find({ nurseIds: userId })
-//           .select("patientUserId")
-//           .lean();
-//         nursePatients.forEach(patient => associatedUserIds.add(patient.patientUserId.toString()));
-
-//         // Get caregivers assigned to same patients
-//         const nursePatientIds = nursePatients.map(p => p._id);
-//         const nurseCaregivers = await Caregiver.find({
-//           patientId: { $in: nursePatientIds }
-//         }).select("caregiverUserId").lean();
-//         nurseCaregivers.forEach(caregiver => associatedUserIds.add(caregiver.caregiverUserId.toString()));
-
-//         // Add hospital admin
-//         if (nurse.hospitalId) {
-//           const hospitalAdmin = await Hospital.findOne({ _id: nurse.hospitalId })
-//             .select("hospitalUserId")
-//             .lean();
-//           if (hospitalAdmin) {
-//             associatedUserIds.add(hospitalAdmin.hospitalUserId.toString());
-//           }
-//         }
-//         break;
-
-//       case "caregiver":
-//         // Caregiver can see their patients, nurses, and family members
-//         const caregiver = await Caregiver.findOne({ caregiverUserId: userId });
-//         if (!caregiver) return [];
-
-//         // Get patients assigned to this caregiver
-//         const caregiverPatients = await Patient.find({
-//           $or: [
-//             { primaryCaregiverId: userId },
-//             { secondaryCaregiverIds: userId }
-//           ]
-//         }).select("patientUserId").lean();
-//         caregiverPatients.forEach(patient => associatedUserIds.add(patient.patientUserId.toString()));
-
-//         // Get nurses for these patients
-//         const caregiverPatientIds = caregiverPatients.map(p => p._id);
-//         const caregiverNurses = await Nurse.find({
-//           patientId: { $in: caregiverPatientIds }
-//         }).select("nurseUserId").lean();
-//         caregiverNurses.forEach(nurse => associatedUserIds.add(nurse.nurseUserId.toString()));
-
-//         // Get family members for these patients
-//         const caregiverFamilyMembers = await FamilyMember.find({
-//           patientId: { $in: caregiverPatientIds }
-//         }).select("familyMemberUserId").lean();
-//         caregiverFamilyMembers.forEach(family => associatedUserIds.add(family.familyMemberUserId.toString()));
-
-//         // Add hospital admin and assigned nurse
-//         if (caregiver.hospitalId) {
-//           const hospitalAdmin = await Hospital.findOne({ _id: caregiver.hospitalId })
-//             .select("hospitalUserId")
-//             .lean();
-//           if (hospitalAdmin) {
-//             associatedUserIds.add(hospitalAdmin.hospitalUserId.toString());
-//           }
-//         }
-//         if (caregiver.nurseId) {
-//           associatedUserIds.add(caregiver.nurseId.toString());
-//         }
-//         break;
-
-//       case "family":
-//         // Family member can see their patient, nurses, and caregivers
-//         const familyMember = await FamilyMember.findOne({ familyMemberUserId: userId });
-//         if (!familyMember) return [];
-
-//         // Get patient details
-//         const patient = await Patient.findById(familyMember.patientId);
-//         if (!patient) return [];
-
-//         // Add the patient
-//         associatedUserIds.add(patient.patientUserId.toString());
-
-//         // Get nurses for this patient
-//         const familyNurses = await Nurse.find({ patientId: patient._id })
-//           .select("nurseUserId")
-//           .lean();
-//         familyNurses.forEach(nurse => associatedUserIds.add(nurse.nurseUserId.toString()));
-
-//         // Get caregivers for this patient
-//         const familyCaregivers = await Caregiver.find({ patientId: patient._id })
-//           .select("caregiverUserId")
-//           .lean();
-//         familyCaregivers.forEach(caregiver => associatedUserIds.add(caregiver.caregiverUserId.toString()));
-
-//         // Add hospital admin
-//         if (patient.hospitalId) {
-//           const hospitalAdmin = await Hospital.findOne({ _id: patient.hospitalId })
-//             .select("hospitalUserId")
-//             .lean();
-//           if (hospitalAdmin) {
-//             associatedUserIds.add(hospitalAdmin.hospitalUserId.toString());
-//           }
-//         }
-//         break;
-
-//       case "patient":
-//         // Patient can see their nurses, caregivers, and family members
-//         const patientUser = await Patient.findOne({ patientUserId: userId });
-//         if (!patientUser) return [];
-
-//         // Add nurses
-//         patientUser.nurseIds.forEach(nurseId => {
-//           if (nurseId) associatedUserIds.add(nurseId.toString());
-//         });
-
-//         // Add primary caregivers
-//         patientUser.primaryCaregiverId.forEach(caregiverId => {
-//           if (caregiverId) associatedUserIds.add(caregiverId.toString());
-//         });
-
-//         // Add secondary caregivers
-//         patientUser.secondaryCaregiverIds.forEach(caregiverId => {
-//           if (caregiverId) associatedUserIds.add(caregiverId.toString());
-//         });
-
-//         // Add family members
-//         patientUser.familyMemberIds.forEach(familyId => {
-//           if (familyId) associatedUserIds.add(familyId.toString());
-//         });
-
-//         // Add hospital admin
-//         if (patientUser.hospitalId) {
-//           const hospitalAdmin = await Hospital.findOne({ _id: patientUser.hospitalId })
-//             .select("hospitalUserId")
-//             .lean();
-//           if (hospitalAdmin) {
-//             associatedUserIds.add(hospitalAdmin.hospitalUserId.toString());
-//           }
-//         }
-//         break;
-
-//       default:
-//         return [];
-//     }
-
-//     // Remove current user and any null/undefined values
-//     associatedUserIds.delete(userId.toString());
-//     const uniqueUserIds = Array.from(associatedUserIds).filter(id => id);
-
-//     if (uniqueUserIds.length === 0) {
-//       return [];
-//     }
-
-//     // Get user details
-//     const users = await User.find({
-//       _id: { $in: uniqueUserIds },
-//       isActive: true
-//     })
-//     .select("_id firstName lastName role profile_image online lastSeen socketId")
-//     .lean();
-
-//     await SystemLog.create({
-//       action: "associated_users_viewed",
-//       entityType: "User",
-//       performedBy: userId,
-//       metadata: { role: userRole, count: users.length }
-//     });
-
-//     return users;
-
-//   } catch (error) {
-//     console.error("Error in getAssociatedUsers:", error);
-//     return [];
-//   }
-// };
-
-// export const getAssociatedUsers = async (userId, userRole) => {
-//   let associatedUserIds = [];
-
-//   switch (userRole) {
-//     case "super_admin":
-//       // Super admin can see all users
-//       const allUsers = await User.find({ isActive: true })
-//         .select("_id firstName lastName role profile_image online lastSeen")
-//         .lean();
-//       return allUsers;
-
-//     case "hospital":
-//       // Hospital can see all users in their hospital
-//       const hospital = await Hospital.findOne({ hospitalUserId: userId });
-//       if (!hospital) return [];
-
-//       // Get all nurses, patients, caregivers in this hospital
-//       const hospitalNurses = await Nurse.find({ hospitalId: hospital._id })
-//         .select("nurseUserId")
-//         .lean();
-//       const hospitalPatients = await Patient.find({ hospitalId: hospital._id })
-//         .select("patientUserId")
-//         .lean();
-//       const hospitalCaregivers = await Caregiver.find({
-//         hospitalId: hospital._id
-//       })
-//         .select("caregiverUserId")
-//         .lean();
-
-//       associatedUserIds = [
-//         ...hospitalNurses.map((n) => n.nurseUserId),
-//         ...hospitalPatients.map((p) => p.patientUserId),
-//         ...hospitalCaregivers.map((c) => c.caregiverUserId)
-//       ];
-//       break;
-
-//     case "nurse":
-//       // Nurse can see their patients and assigned caregivers
-//       const nurse = await Nurse.findOne({ nurseUserId: userId });
-//       if (!nurse) return [];
-
-//       // Get patients assigned to this nurse
-//       const nursePatients = await Patient.find({ nurseIds: userId })
-//         .select("patientUserId")
-//         .lean();
-
-//       // Get caregivers assigned to same patients
-//       const nursePatientIds = nursePatients.map((p) => p.patientUserId);
-//       const nurseCaregivers = await Caregiver.find({
-//         patientId: { $in: nursePatientIds }
-//       })
-//         .select("caregiverUserId")
-//         .lean();
-
-//       associatedUserIds = [
-//         ...nursePatients.map((p) => p.patientUserId),
-//         ...nurseCaregivers.map((c) => c.caregiverUserId),
-//         nurse.hospitalId // Hospital admin
-//       ];
-//       break;
-
-//     case "caregiver":
-//       // Caregiver can see their patients, nurses, and family members
-//       const caregiver = await Caregiver.findOne({ caregiverUserId: userId });
-//       if (!caregiver) return [];
-
-//       // Get patients assigned to this caregiver
-//       const caregiverPatients = await Patient.find({
-//         $or: [{ primaryCaregiverId: userId }, { secondaryCaregiverIds: userId }]
-//       })
-//         .select("patientUserId")
-//         .lean();
-
-//       // Get nurses for these patients
-//       const caregiverPatientIds = caregiverPatients.map((p) => p.patientUserId);
-//       const caregiverNurses = await Nurse.find({
-//         patientId: { $in: caregiverPatientIds }
-//       })
-//         .select("nurseUserId")
-//         .lean();
-
-//       // Get family members for these patients
-//       const caregiverFamilyMembers = await FamilyMember.find({
-//         patientId: { $in: caregiverPatientIds }
-//       })
-//         .select("familyMemberUserId")
-//         .lean();
-
-//       associatedUserIds = [
-//         ...caregiverPatients.map((p) => p.patientUserId),
-//         ...caregiverNurses.map((n) => n.nurseUserId),
-//         ...caregiverFamilyMembers.map((f) => f.familyMemberUserId),
-//         caregiver.hospitalId, // Hospital admin
-//         caregiver.nurseId // Assigned nurse
-//       ].filter((id) => id); // Remove null/undefined
-//       break;
-
-//     case "family":
-//       // Family member can see their patient, nurses, and caregivers
-//       const familyMember = await FamilyMember.findOne({
-//         familyMemberUserId: userId
-//       });
-//       if (!familyMember) return [];
-
-//       // Get patient details
-//       const patient = await Patient.findById(familyMember.patientId);
-//       if (!patient) return [];
-
-//       // Get nurses and caregivers for this patient
-//       const familyNurses = await Nurse.find({ patientId: patient._id })
-//         .select("nurseUserId")
-//         .lean();
-//       const familyCaregivers = await Caregiver.find({ patientId: patient._id })
-//         .select("caregiverUserId")
-//         .lean();
-
-//       associatedUserIds = [
-//         patient.patientUserId,
-//         ...familyNurses.map((n) => n.nurseUserId),
-//         ...familyCaregivers.map((c) => c.caregiverUserId),
-//         patient.hospitalId // Hospital admin
-//       ];
-//       break;
-
-//     case "patient":
-//       // Patient can see their nurses, caregivers, and family members
-//       const patientUser = await Patient.findOne({ patientUserId: userId });
-//       if (!patientUser) return [];
-
-//       associatedUserIds = [
-//         ...patientUser.nurseIds,
-//         ...patientUser.primaryCaregiverId,
-//         ...patientUser.secondaryCaregiverIds,
-//         ...patientUser.familyMemberIds,
-//         patientUser.hospitalId
-//       ];
-//       break;
-
-//     default:
-//       return [];
-//   }
-
-//   // Remove duplicates and current user
-//   const uniqueUserIds = [
-//     ...new Set(associatedUserIds.map((id) => id.toString()))
-//   ].filter((id) => id !== userId.toString());
-
-//   // Get user details
-//   const users = await User.find({
-//     _id: { $in: uniqueUserIds },
-//     isActive: true
-//   })
-//     .select(
-//       "_id firstName lastName role profile_image online lastSeen socketId"
-//     )
-//     .lean();
-
-//   await SystemLog.create({
-//     action: "associated_users_viewed",
-//     entityType: "User",
-//     performedBy: userId,
-//     metadata: { role: userRole, count: users.length }
-//   });
-
-//   return users;
-// };
