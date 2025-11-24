@@ -8,7 +8,7 @@ import {
   caregiverSchema,
   familyMemberSchema,
   patientSchema,
-  hospitalSchema
+  hospitalSchema,
 } from "../../validation/userValidation.js";
 
 const router = express.Router();
@@ -66,7 +66,7 @@ router.put(
 router.get(
   "/stats",
   authenticate,
-  authorize(["super_admin", "hospital", "nurse","caregiver"]),
+  authorize(["super_admin", "hospital", "nurse", "caregiver"]),
   userController.getUserStatsByRole
 );
 
@@ -98,6 +98,19 @@ router.get(
   userController.getNurseStats
 );
 
+router.get(
+  "/caregiver-cards-stats",
+  authenticate,
+  authorize(["caregiver"]),
+  userController.getCaregiverStats
+);
+
+router.get(
+  "/family-cards-stats",
+  authenticate,
+  authorize(["family"]),
+  userController.getFamilyMemberStatsController
+);
 
 router.post(
   "/get-nurses",
@@ -123,6 +136,5 @@ router.post(
   authorize(["super_admin"]),
   userController.getPatients
 );
-
 
 export default router;

@@ -683,3 +683,38 @@ export const getPatients = async (req, res) => {
       .json({ success: false, message: error.message });
   }
 };
+
+export const getCaregiverStats = async (req, res) => {
+  try {
+    const caregiverId = req.user.id;
+    const { startDate, endDate } = req.query;
+
+    const result = await userService.getCaregiverStats(
+      caregiverId,
+      startDate,
+      endDate
+    );
+
+    return res.success("Caregiver stats fetched successfully.", result, 200);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};
+
+export const getFamilyMemberStatsController = async (req, res) => {
+  try {
+    const familyMemberId = req.user.id;
+
+    const stats = await userService.getFamilyMemberStats(familyMemberId);
+
+    return res.success("Family member stats fetched successfully.", stats, 200);
+  } catch (error) {
+    return res.status(error.statusCode || 500).json({
+      success: false,
+      message: error.message,
+    });
+  }
+};

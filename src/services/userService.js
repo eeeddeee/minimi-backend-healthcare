@@ -9,6 +9,7 @@ import Caregiver from "../models/caregiverModel.js";
 import Family from "../models/familyModel.js";
 import Patient from "../models/patientModel.js";
 import BehaviorLog from "../models/behaviorLogModel.js";
+import MedicationReminder from "../models/medicationReminderModel.js";
 
 const createUserWithRole = async (userData, role, createdBy, session) => {
   const existingEmail = await User.findOne({ email: userData.email }).session(
@@ -18,7 +19,7 @@ const createUserWithRole = async (userData, role, createdBy, session) => {
     throw {
       message: "Email already exists",
       statusCode: StatusCodes.CONFLICT,
-      field: "email"
+      field: "email",
     };
   }
 
@@ -29,7 +30,7 @@ const createUserWithRole = async (userData, role, createdBy, session) => {
     throw {
       message: "Phone Number already exists",
       statusCode: StatusCodes.CONFLICT,
-      field: "phone"
+      field: "phone",
     };
   }
 
@@ -47,8 +48,8 @@ const createUserWithRole = async (userData, role, createdBy, session) => {
         entityType: "User",
         entityId: user[0]._id,
         performedBy: createdBy,
-        metadata: { email: user[0].email, role: user[0].role }
-      }
+        metadata: { email: user[0].email, role: user[0].role },
+      },
     ],
     { session }
   );
@@ -80,13 +81,12 @@ export const createFamilyMember = async (userData, createdBy, session) => {
 export const createPatient = async (userData, createdBy, session) => {
   return createUserWithRole(userData, "patient", createdBy, session);
 };
- 
 
 export const updateUserBasics = async (userId, updates = {}, session) => {
   // protect fields
   const allowed = [
     "firstName",
-    "lastName", 
+    "lastName",
     "phone",
     "languagePreference",
     "street",
@@ -95,7 +95,7 @@ export const updateUserBasics = async (userId, updates = {}, session) => {
     "country",
     "postalCode",
     "dateOfBirth",
-    "gender", 
+    "gender",
     "profile_image",
   ];
 
@@ -108,26 +108,26 @@ export const updateUserBasics = async (userId, updates = {}, session) => {
   if (payload.email) {
     const exists = await User.findOne({
       email: payload.email,
-      _id: { $ne: userId }
+      _id: { $ne: userId },
     }).session(session);
     if (exists) {
       throw {
         statusCode: StatusCodes.CONFLICT,
         message: "Email already exists",
-        field: "email"
+        field: "email",
       };
     }
   }
   if (payload.phone) {
     const exists = await User.findOne({
       phone: payload.phone,
-      _id: { $ne: userId }
+      _id: { $ne: userId },
     }).session(session);
     if (exists) {
       throw {
         statusCode: StatusCodes.CONFLICT,
         message: "Phone Number already exists",
-        field: "phone"
+        field: "phone",
       };
     }
   }
@@ -148,8 +148,8 @@ export const updateUserBasics = async (userId, updates = {}, session) => {
         action: "user_updated",
         entityType: "User",
         entityId: userId,
-        metadata: { fields: Object.keys(payload) }
-      }
+        metadata: { fields: Object.keys(payload) },
+      },
     ],
     { session }
   );
@@ -172,7 +172,7 @@ export const updateUserStatus = async (
     userId,
     {
       $set: { isActive: isActive },
-      $currentDate: { updatedAt: true }
+      $currentDate: { updatedAt: true },
     },
     { new: true, session }
   ).lean();
@@ -193,9 +193,9 @@ export const updateUserStatus = async (
         metadata: {
           role: user.role,
           email: user.email,
-          status: isActive ? "active" : "inactive"
-        }
-      }
+          status: isActive ? "active" : "inactive",
+        },
+      },
     ],
     { session }
   );
@@ -225,19 +225,19 @@ export const getUserStatsByRole = async (role, hospitalId) => {
     const [total, active, inactive] = await Promise.all([
       User.countDocuments(base),
       User.countDocuments({ ...base, isActive: true }),
-      User.countDocuments({ ...base, isActive: false })
+      User.countDocuments({ ...base, isActive: false }),
     ]);
 
     return {
       role,
       totalUsers: total,
       activeUsers: active,
-      inactiveUsers: inactive
+      inactiveUsers: inactive,
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch user stats",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -272,14 +272,14 @@ export const getUserStatsByRole = async (role, hospitalId) => {
 export const getUserStatsForAdmin = async (startDate, endDate) => {
   try {
     const roles = ["hospital", "nurse", "caregiver", "family", "patient"];
-const payment = 0;
+    const payment = 0;
     const result = {};
 
     const dateFilter = {};
     if (startDate && endDate) {
       dateFilter.createdAt = {
         $gte: new Date(startDate),
-        $lte: new Date(endDate)
+        $lte: new Date(endDate),
       };
     } else if (startDate) {
       dateFilter.createdAt = { $gte: new Date(startDate) };
@@ -293,11 +293,11 @@ const payment = 0;
       result[role] = total;
     }
 
-    return {...result, payment};
+    return { ...result, payment };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch user stats",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -353,27 +353,27 @@ export const getHospitalStatsByDate = async (startDate, endDate) => {
       {
         $match: {
           role: "hospital",
-          createdAt: { $gte: start, $lte: end }
-        }
+          createdAt: { $gte: start, $lte: end },
+        },
       },
       {
         $group: {
           _id: {
             $dateToString: {
               format: "%Y-%m-%d",
-              date: "$createdAt" 
-            }
+              date: "$createdAt",
+            },
           },
-          hospitals: { $sum: 1 }
-        }
+          hospitals: { $sum: 1 },
+        },
       },
       {
         $project: {
           _id: 0,
           date: "$_id",
-          hospitals: 1
-        }
-      }
+          hospitals: 1,
+        },
+      },
     ]);
 
     const result = allDates.map((date) => {
@@ -385,7 +385,7 @@ export const getHospitalStatsByDate = async (startDate, endDate) => {
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch hospital stats",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
     };
   }
 };
@@ -489,16 +489,16 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
           from: "users",
           localField: "patientUserId",
           foreignField: "_id",
-          as: "u"
-        }
+          as: "u",
+        },
       },
       { $unwind: "$u" },
       {
         $group: {
           _id: "$u.isActive",
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ];
 
     const nursePipeline = [
@@ -508,8 +508,8 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
           from: "users",
           localField: "nurseUserId",
           foreignField: "_id",
-          as: "u"
-        }
+          as: "u",
+        },
       },
       { $unwind: "$u" },
 
@@ -517,9 +517,9 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
       {
         $group: {
           _id: "$u.isActive",
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ];
 
     const caregiverPipeline = [
@@ -529,16 +529,16 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
           from: "users",
           localField: "caregiverUserId",
           foreignField: "_id",
-          as: "u"
-        }
+          as: "u",
+        },
       },
       { $unwind: "$u" },
       {
         $group: {
           _id: "$u.isActive",
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ];
 
     const familyPipeline = [
@@ -548,8 +548,8 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
           from: "patients",
           localField: "patientId",
           foreignField: "_id",
-          as: "p"
-        }
+          as: "p",
+        },
       },
       { $unwind: "$p" },
       { $match: { "p.hospitalId": hospObjId } },
@@ -558,27 +558,27 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
           from: "users",
           localField: "familyMemberUserId",
           foreignField: "_id",
-          as: "u"
-        }
+          as: "u",
+        },
       },
       { $unwind: "$u" },
       {
         $group: {
           _id: "$u.isActive",
-          count: { $sum: 1 }
-        }
-      }
+          count: { $sum: 1 },
+        },
+      },
     ];
     const [pAgg, nAgg, cAgg, fAgg] = await Promise.all([
       Patient.aggregate(patientPipeline),
       Nurse.aggregate(nursePipeline),
       Caregiver.aggregate(caregiverPipeline),
-      Family.aggregate(familyPipeline)
+      Family.aggregate(familyPipeline),
     ]);
 
     const split = (agg) => ({
       active: agg.find((d) => d._id === true)?.count || 0,
-      inactive: agg.find((d) => d._id === false)?.count || 0
+      inactive: agg.find((d) => d._id === false)?.count || 0,
     });
 
     const p = split(pAgg);
@@ -597,12 +597,173 @@ export const getHospitalStats = async (hospitalId, startDate, endDate) => {
       totalInActiveCaregivers: c.inactive,
 
       totalActiveFamilys: f.active,
-      totalInActiveFamilys: f.inactive
+      totalInActiveFamilys: f.inactive,
     };
   } catch (error) {
     throw {
       message: error.message || "Failed to fetch hospital stats",
-      statusCode: error.statusCode || 500
+      statusCode: error.statusCode || 500,
+    };
+  }
+};
+export const getCaregiverStats = async (caregiverId, startDate, endDate) => {
+  try {
+    const caregiverObjId = new mongoose.Types.ObjectId(caregiverId);
+
+    const dateFilter = {};
+    if (startDate && endDate) {
+      dateFilter.date = { $gte: new Date(startDate), $lte: new Date(endDate) };
+    } else if (startDate) {
+      dateFilter.date = { $gte: new Date(startDate) };
+    } else if (endDate) {
+      dateFilter.date = { $lte: new Date(endDate) };
+    }
+
+    const baseMatch = {
+      $or: [
+        { primaryCaregiverId: caregiverObjId },
+        { secondaryCaregiverIds: caregiverObjId },
+      ],
+    };
+
+    const totalPatients = await Patient.countDocuments(baseMatch);
+
+    // ACTIVE
+    const totalActivePatients = await Patient.countDocuments({
+      ...baseMatch,
+      status: "active",
+    });
+
+    // INACTIVE
+    const totalDischargePatients = await Patient.countDocuments({
+      ...baseMatch,
+      status: "discharged",
+    });
+
+    const caregiverPatients = await Patient.find(
+      {
+        $or: [
+          { primaryCaregiverId: caregiverObjId },
+          { secondaryCaregiverIds: caregiverObjId },
+        ],
+      },
+      { _id: 1 }
+    ).lean();
+
+    const patientIds = caregiverPatients.map((p) => p._id);
+
+    const today = new Date();
+    today.setHours(0, 0, 0, 0);
+
+    const pipeline = [
+      {
+        $match: {
+          patientId: { $in: patientIds },
+          ...(Object.keys(dateFilter).length ? dateFilter : {}),
+          incidents: { $exists: true, $ne: [] },
+        },
+      },
+      {
+        $project: {
+          incidentsCount: { $size: "$incidents" },
+        },
+      },
+      {
+        $group: {
+          _id: null,
+          total: { $sum: "$incidentsCount" },
+        },
+      },
+    ];
+
+    const incidentAgg = await BehaviorLog.aggregate(pipeline);
+    const totalTodayIncidents = incidentAgg[0]?.total || 0;
+
+    return {
+      totalPatients,
+      totalActivePatients,
+      totalDischargePatients,
+      totalTodayIncidents,
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch caregiver stats",
+      statusCode: 500,
+    };
+  }
+};
+
+export const getFamilyMemberStats = async (familyMemberId) => {
+  try {
+    const familyObjId = new mongoose.Types.ObjectId(familyMemberId);
+
+    // -----------------------------------------
+    // 1️⃣ PATIENTS LINKED TO THIS FAMILY MEMBER
+    // -----------------------------------------
+    const baseMatch = {
+      $or: [
+        { primaryFamilyMemberId: familyObjId },
+        { secondaryFamilyMemberIds: familyObjId },
+      ],
+    };
+
+    const familyPatients = await Patient.find(baseMatch, { _id: 1 }).lean();
+    const patientIds = familyPatients.map((p) => p._id);
+
+    // -----------------------------------------
+    // USER TABLE → ACTIVE / INACTIVE PATIENTS
+    // -----------------------------------------
+
+    const totalPatients = await User.countDocuments({
+      _id: { $in: patientIds },
+      role: "patient",
+    });
+
+    const totalActivePatients = await User.countDocuments({
+      _id: { $in: patientIds },
+      role: "patient",
+      isActive: true,
+    });
+
+    const totalInactivePatients = await User.countDocuments({
+      _id: { $in: patientIds },
+      role: "patient",
+      isActive: false,
+    });
+
+    // -----------------------------------------
+    // 2️⃣ UPCOMING MEDICATION REMINDERS
+    // -----------------------------------------
+    const now = new Date();
+
+    const upcomingMedications = await MedicationReminder.find({
+      patientId: { $in: patientIds },
+      status: "active",
+      nextDose: { $gte: now }, // upcoming doses only
+    })
+      .sort({ nextDose: 1 })
+      .limit(10)
+      .populate({
+        path: "patientId",
+        select: "patientUserId",
+        populate: {
+          path: "patientUserId",
+          select: "firstName lastName",
+        },
+      })
+      .lean();
+
+    return {
+      totalPatients,
+      totalActivePatients,
+      totalInactivePatients,
+      upcomingMedicationsCount: upcomingMedications.length,
+      upcomingMedications,
+    };
+  } catch (error) {
+    throw {
+      message: error.message || "Failed to fetch family member stats",
+      statusCode: 500,
     };
   }
 };
@@ -633,7 +794,7 @@ const listByRole = async ({
         matchStage[`${asName}.createdBy`] = hospitalId;
       }
     }
-    console.log(matchStage," matchStage");
+    console.log(matchStage, " matchStage");
 
     // const matchStage = {};
     // if (hospitalId) {
@@ -752,7 +913,7 @@ export const getFamilies = (query = {}, page = 1, limit = 10, hospitalId) =>
     query,
     page,
     limit,
-    hospitalId
+    hospitalId,
   });
 
 export const getPatients = (query = {}, page = 1, limit = 10, hospitalId) =>

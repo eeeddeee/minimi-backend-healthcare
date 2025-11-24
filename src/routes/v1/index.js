@@ -18,6 +18,7 @@ import messagesRoute from "./messagingRoute.js";
 import patStatusHistoryRoute from "./patientStatusHistoryRoute.js";
 import paymentRoute from "./paymentRoutes.js";
 import notificationRoute from "./notificationRoute.js";
+import dashboardRoute from "./dashboardRoutes.js";
 
 // import systemLogRoute from "./systemLogRoute.js";
 // import adminStatsRoute from "./adminStatsRoute.js";
@@ -47,6 +48,7 @@ const defaultIRoute = [
   { path: "/", route: patStatusHistoryRoute },
   { path: "/payment", route: paymentRoute },
   { path: "/notifications", route: notificationRoute },
+  { path: "/dashboard", route: dashboardRoute },
 ];
 
 defaultIRoute.forEach((route) => {
