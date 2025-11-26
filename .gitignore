@@ -28,3 +28,6 @@ dump/
 
 #Public Folder for Profile Image Storing
 public/
+
+src/config/firebase-service-account.json
+src/config/firebase-service-account.json

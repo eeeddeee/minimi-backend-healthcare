@@ -145,6 +145,14 @@ const userSchema = new mongoose.Schema(
       currentPeriodEnd: { type: Date },
       dueDate: { type: Date },
     },
+    fcmToken: {
+      type: String,
+      default: null,
+    },
+    fcmTokenUpdatedAt: {
+      type: Date,
+      default: null,
+    },
     createdAt: {
       type: Date,
       default: Date.now,

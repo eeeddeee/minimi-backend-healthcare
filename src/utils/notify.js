@@ -6,6 +6,7 @@ import Patient from "../models/patientModel.js";
 import Caregiver from "../models/caregiverModel.js";
 import Nurse from "../models/nurseModel.js";
 import FamilyMember from "../models/familyModel.js";
+import { sendFCMToUsers } from "../services/fcmService.js";
 
 export const notifyUsers = async ({
   userIds = [],
@@ -16,6 +17,7 @@ export const notifyUsers = async ({
   priority = "normal",
   emitEvent = "notification:new",
   emitCount = true,
+  sendFCM = true,
 }) => {
   if (!userIds.length) return [];
 
@@ -38,6 +40,21 @@ export const notifyUsers = async ({
     }
   });
 
+  // Send FCM notifications
+  if (sendFCM) {
+    await sendFCMToUsers(
+      userIds,
+      { title, message },
+      {
+        type,
+        priority,
+        notificationId: created[0]?._id,
+        deeplink: data.deeplink,
+        ...data,
+      }
+    );
+  }
+
   return created;
 };
 
@@ -48,6 +65,7 @@ export const notifySuperAdmins = async ({
   data = {},
   priority = "normal",
   emitEvent = "notification:new",
+  sendFCM = true,
 }) => {
   const supers = await User.find({
     role: "super_admin",
@@ -67,6 +85,7 @@ export const notifySuperAdmins = async ({
     data,
     priority,
     emitEvent,
+    sendFCM,
   });
 };
 
@@ -80,6 +99,7 @@ export const notifyUser = async ({
   priority = "normal",
   emitEvent = "notification:new",
   emitCount = true,
+  sendFCM = true,
 }) => {
   if (!userId) return [];
 
@@ -98,6 +118,7 @@ export const notifyUser = async ({
     priority,
     emitEvent,
     emitCount,
+    sendFCM,
   });
 };
 
@@ -112,6 +133,7 @@ export const notifyHospitalStaff = async ({
   emitCount = true,
   roles = ["nurse", "caregiver"],
   excludeUserId,
+  sendFCM = true,
 }) => {
   if (!hospitalUserId) return [];
 
@@ -140,6 +162,7 @@ export const notifyHospitalStaff = async ({
     priority,
     emitEvent,
     emitCount,
+    sendFCM,
   });
 };
 
@@ -150,6 +173,7 @@ export const notifyHospitalOnFeedback = async ({
   comment,
   emitEvent = "notification:new",
   emitCount = true,
+  sendFCM = true,
 }) => {
   if (!resourceId || !submittedByUserId) return [];
 
@@ -201,6 +225,7 @@ export const notifyHospitalOnFeedback = async ({
     priority: "normal",
     emitEvent,
     emitCount,
+    sendFCM,
     data: {
       kind: "elearning_feedback_submitted",
       resourceId,
@@ -242,6 +267,7 @@ export const notifyAssignNurseToPatient = async ({
   assignedByUserId, // optional (for message context)
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!patientId || !nurseUserId) return [];
 
@@ -269,6 +295,7 @@ export const notifyAssignNurseToPatient = async ({
     priority,
     title: "New patient assigned",
     message: `${patientName} has been assigned to you by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_nurse_to_patient",
       patientId,
@@ -285,6 +312,7 @@ export const notifyAssignCaregiverToNurse = async ({
   assignedByUserId,
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!caregiverUserId || !nurseUserId) return [];
 
@@ -312,6 +340,7 @@ export const notifyAssignCaregiverToNurse = async ({
     priority,
     title: "Assigned to a nurse",
     message: `You have been assigned to ${nurseName} by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_caregiver_to_nurse",
       nurseUserId,
@@ -329,6 +358,7 @@ export const notifyAssignCaregiverToPatient = async ({
   assignedByUserId,
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!patientId || !caregiverUserId) return [];
 
@@ -356,6 +386,7 @@ export const notifyAssignCaregiverToPatient = async ({
     priority,
     title: `Assigned as ${roleText}`,
     message: `You have been added as ${roleText} for ${patientName} by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_caregiver_to_patient",
       patientId,
@@ -374,6 +405,7 @@ export const notifyAssignFamilyToPatient = async ({
   assignedByUserId,
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!patientId || !familyMemberUserId) return [];
 
@@ -399,6 +431,7 @@ export const notifyAssignFamilyToPatient = async ({
     priority,
     title: "Added as family member",
     message: `You have been added as “${relationship}” for ${patientName} by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_family_to_patient",
       patientId,
@@ -416,6 +449,7 @@ export const notifyPatientAboutNurseAssignment = async ({
   assignedByUserId,
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!patientId || !nurseUserId) return [];
 
@@ -440,6 +474,7 @@ export const notifyPatientAboutNurseAssignment = async ({
     priority,
     title: "Your nurse has been assigned",
     message: `${nurseName} has been assigned as your nurse by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_nurse_to_patient_patient_side",
       patientId,
@@ -457,6 +492,7 @@ export const notifyPatientAboutCaregiverAssignment = async ({
   assignedByUserId,
   type = "activity",
   priority = "normal",
+  sendFCM = true,
 }) => {
   if (!patientId || !caregiverUserId) return [];
 
@@ -484,6 +520,7 @@ export const notifyPatientAboutCaregiverAssignment = async ({
     priority,
     title: "Caregiver assigned to you",
     message: `${cgName} has been added as your ${roleText} by ${by}.`,
+    sendFCM,
     data: {
       kind: "assign_caregiver_to_patient_patient_side",
       patientId,
@@ -503,6 +540,7 @@ export const notifyNurseAboutCaregiverAssignment = async ({
   priority = "normal",
   emitEvent = "notification:new",
   emitCount = true,
+  sendFCM = true,
 }) => {
   if (!caregiverUserId || !nurseUserId) return [];
 
@@ -535,6 +573,7 @@ export const notifyNurseAboutCaregiverAssignment = async ({
     emitCount,
     title: "Caregiver assigned to you",
     message: `${cgName} has been assigned to you by ${byName}.`,
+    sendFCM,
     data: {
       kind: "assign_caregiver_to_nurse_nurse_side",
       caregiverUserId,
