@@ -71,27 +71,71 @@ export const notifyUsers = async ({
     console.log("➡️  FCM Tokens:", tokens);
 
     if (tokens.length > 0) {
-      console.log("🚀 Sending FCM notification...");
+      console.log("🚀 Sending FCM notification in legacy format...");
 
-      await sendFCMToUsers(
-        tokens,
-        { title, message },
-        {
+      for (const token of tokens) {
+        const payload = {
+          to: token, // device token
+          data: {
+            title: title,
+            body: message,
+            ...data, // any extra custom fields, e.g., roomId, deeplink
+          },
+          content_available: true,
+          priority: "high",
+        };
+
+        console.log("📨 FCM Payload:", JSON.stringify(payload, null, 2));
+
+        // Send to FCM
+        await sendFCMToUsers([token], payload, {
           type,
           priority,
           notificationId: created[0]?._id,
-          deeplink: data.deeplink,
-          ...data,
-        }
-      );
+        });
+      }
 
-      console.log("✅ FCM Notification sent successfully!");
+      console.log("✅ FCM Notifications sent successfully!");
     } else {
       console.log("⚠️ No valid FCM tokens. Skipping FCM.");
     }
-  } else {
-    console.log("⚠️ FCM sending disabled (sendFCM = false)");
   }
+  // if (sendFCM) {
+  //   console.log("📌 Fetching users for FCM tokens...");
+
+  //   const users = await User.find(
+  //     { _id: { $in: userIds }, fcmToken: { $ne: null } },
+  //     { fcmToken: 1 }
+  //   );
+
+  //   console.log("📱 Users found with FCM tokens:", users.length);
+
+  //   const tokens = users.map((u) => u.fcmToken).filter(Boolean);
+
+  //   console.log("➡️  FCM Tokens:", tokens);
+
+  //   if (tokens.length > 0) {
+  //     console.log("🚀 Sending FCM notification...");
+
+  //     await sendFCMToUsers(
+  //       tokens,
+  //       { title, message },
+  //       {
+  //         type,
+  //         priority,
+  //         notificationId: created[0]?._id,
+  //         deeplink: data.deeplink,
+  //         ...data,
+  //       }
+  //     );
+
+  //     console.log("✅ FCM Notification sent successfully!");
+  //   } else {
+  //     console.log("⚠️ No valid FCM tokens. Skipping FCM.");
+  //   }
+  // } else {
+  //   console.log("⚠️ FCM sending disabled (sendFCM = false)");
+  // }
 
   console.log("=============================");
   console.log("📨 notifyUsers FINISHED");
