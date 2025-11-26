@@ -40,23 +40,49 @@ export const notifyUsers = async ({
     }
   });
 
-  // Send FCM notifications
   if (sendFCM) {
-    await sendFCMToUsers(
-      userIds,
-      { title, message },
-      {
-        type,
-        priority,
-        notificationId: created[0]?._id,
-        deeplink: data.deeplink,
-        ...data,
-      }
+    // Fetch users to get their fcmToken
+    const users = await User.find(
+      { _id: { $in: userIds }, fcmToken: { $ne: null } },
+      { fcmToken: 1 }
     );
+
+    const tokens = users.map((u) => u.fcmToken).filter(Boolean);
+
+    if (tokens.length > 0) {
+      await sendFCMToUsers(
+        tokens,
+        { title, message },
+        {
+          type,
+          priority,
+          notificationId: created[0]?._id,
+          deeplink: data.deeplink,
+          ...data,
+        }
+      );
+    }
   }
 
   return created;
 };
+//   // Send FCM notifications
+//   if (sendFCM) {
+//     await sendFCMToUsers(
+//       userIds,
+//       { title, message },
+//       {
+//         type,
+//         priority,
+//         notificationId: created[0]?._id,
+//         deeplink: data.deeplink,
+//         ...data,
+//       }
+//     );
+//   }
+
+//   return created;
+// };
 
 export const notifySuperAdmins = async ({
   type = "system",
