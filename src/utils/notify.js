@@ -19,6 +19,16 @@ export const notifyUsers = async ({
   emitCount = true,
   sendFCM = true,
 }) => {
+  console.log("\n=============================");
+  console.log("📨 notifyUsers STARTED");
+  console.log("=============================");
+
+  console.log("➡️  userIds:", userIds);
+  console.log("➡️  title:", title);
+  console.log("➡️  message:", message);
+  console.log("➡️  type:", type);
+  console.log("➡️  data:", data);
+
   if (!userIds.length) return [];
 
   const docs = userIds.map((id) => ({
@@ -30,26 +40,39 @@ export const notifyUsers = async ({
     priority,
   }));
 
+  console.log("📝 Creating notifications in DB...");
+
   const created = await Notification.insertMany(docs, { ordered: false });
 
+  console.log("✅ Notifications inserted:", created.length);
+
   userIds.forEach((uid, i) => {
+    console.log(`📡 Emitting socket notification to user: ${uid}`);
     emitToUsers([uid], emitEvent, created[i]);
 
     if (emitCount) {
+      console.log(`🔢 Emitting notification count +1 for user: ${uid}`);
       emitToUsers([uid], "notification:count", { delta: 1 });
     }
   });
 
   if (sendFCM) {
-    // Fetch users to get their fcmToken
+    console.log("📌 Fetching users for FCM tokens...");
+
     const users = await User.find(
       { _id: { $in: userIds }, fcmToken: { $ne: null } },
       { fcmToken: 1 }
     );
 
+    console.log("📱 Users found with FCM tokens:", users.length);
+
     const tokens = users.map((u) => u.fcmToken).filter(Boolean);
 
+    console.log("➡️  FCM Tokens:", tokens);
+
     if (tokens.length > 0) {
+      console.log("🚀 Sending FCM notification...");
+
       await sendFCMToUsers(
         tokens,
         { title, message },
@@ -61,8 +84,18 @@ export const notifyUsers = async ({
           ...data,
         }
       );
+
+      console.log("✅ FCM Notification sent successfully!");
+    } else {
+      console.log("⚠️ No valid FCM tokens. Skipping FCM.");
     }
+  } else {
+    console.log("⚠️ FCM sending disabled (sendFCM = false)");
   }
+
+  console.log("=============================");
+  console.log("📨 notifyUsers FINISHED");
+  console.log("=============================\n");
 
   return created;
 };
