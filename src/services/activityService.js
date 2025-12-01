@@ -2,8 +2,15 @@ import { StatusCodes } from "http-status-codes";
 import Activity from "../models/activityModel.js";
 import SystemLog from "../models/systemLogModel.js";
 import Patient from "../models/patientModel.js";
+import User from "../models/userModel.js";
+import {
+  notifyActivityCreated,
+  notifyActivityScheduled,
+} from "../utils/notify.js";
 
-// Create
+/**
+ * Create Activity with Notifications
+ */
 export const createActivity = async (data, createdBy) => {
   const activity = await Activity.create([{ ...data }]);
   const saved = activity[0].toObject();
@@ -13,10 +20,94 @@ export const createActivity = async (data, createdBy) => {
     entityType: "Activity",
     entityId: saved._id,
     performedBy: createdBy,
-    metadata: { patientId: saved.patientId, name: saved.name }
+    metadata: { patientId: saved.patientId, name: saved.name },
   });
 
+  // ✅ SEND NOTIFICATIONS TO ALL RELEVANT USERS
+  try {
+    await notifyActivityCreated({
+      activityId: saved._id,
+      activityName: saved.name,
+      patientId: saved.patientId,
+      scheduledAt: saved.scheduledAt,
+      createdByUserId: createdBy,
+      sendFCM: true,
+    });
+  } catch (error) {
+    console.error("❌ Error sending activity creation notifications:", error);
+    // Don't throw - activity is already created
+  }
+
   return saved;
+};
+
+/**
+ * Get activities that need reminders (scheduled time reached)
+ * This will be called by cron job
+ */
+export const getActivitiesDueForNotification = async () => {
+  const now = new Date();
+
+  // Find activities scheduled within the last 5 minutes that haven't been notified
+  const fiveMinutesAgo = new Date(now.getTime() - 5 * 60 * 1000);
+
+  const activities = await Activity.find({
+    scheduledAt: {
+      $gte: fiveMinutesAgo,
+      $lte: now,
+    },
+    isNotified: { $ne: true }, // Not yet notified
+    status: { $ne: "completed" }, // Not completed
+  })
+    .select("_id name patientId scheduledAt description")
+    .lean();
+
+  return activities;
+};
+
+/**
+ * Mark activity as notified
+ */
+export const markActivityAsNotified = async (activityId) => {
+  await Activity.findByIdAndUpdate(activityId, {
+    $set: { isNotified: true, notifiedAt: new Date() },
+  });
+};
+
+/**
+ * Send scheduled activity notifications
+ * Called by cron job
+ */
+export const sendScheduledActivityNotifications = async () => {
+  try {
+    const activities = await getActivitiesDueForNotification();
+
+    console.log(
+      `\n⏰ Checking scheduled activities: ${activities.length} found`
+    );
+
+    for (const activity of activities) {
+      try {
+        await notifyActivityScheduled({
+          activityId: activity._id,
+          activityName: activity.name,
+          patientId: activity.patientId,
+          scheduledAt: activity.scheduledAt,
+          description: activity.description,
+          sendFCM: true,
+        });
+
+        // Mark as notified
+        await markActivityAsNotified(activity._id);
+
+        console.log(`✅ Notified for activity: ${activity.name}`);
+      } catch (error) {
+        console.error(`❌ Error notifying activity ${activity._id}:`, error);
+      }
+    }
+  } catch (error) {
+    console.error("❌ Error in sendScheduledActivityNotifications:", error);
+  }
 };
 
 // List
@@ -42,22 +133,22 @@ export const getActivities = async (filters = {}, page = 1, limit = 10) => {
         select: "patientUserId",
         populate: {
           path: "patientUserId",
-          select: "firstName lastName"
-        }
+          select: "firstName lastName",
+        },
       })
       .lean(),
-    Activity.countDocuments(query)
+    Activity.countDocuments(query),
   ]);
 
   await SystemLog.create({
     action: "activities_viewed",
     entityType: "Activity",
-    metadata: { filters, page, limit, count: activities.length }
+    metadata: { filters, page, limit, count: activities.length },
   });
 
   return {
     activities,
-    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
   };
 };
 
@@ -70,7 +161,7 @@ export const getActivityById = async (id) => {
   await SystemLog.create({
     action: "activity_viewed",
     entityType: "Activity",
-    entityId: id
+    entityId: id,
   });
 
   return { activity };
@@ -93,7 +184,7 @@ export const updateActivity = async (id, updates = {}) => {
     action: "activity_updated",
     entityType: "Activity",
     entityId: id,
-    metadata: { fields: Object.keys(updates) }
+    metadata: { fields: Object.keys(updates) },
   });
 
   return updated;
@@ -116,7 +207,7 @@ export const updateActivityStatus = async (id, status) => {
     action: "activity_status_updated",
     entityType: "Activity",
     entityId: id,
-    metadata: { status }
+    metadata: { status },
   });
 
   return updated;
@@ -139,22 +230,19 @@ export const updateActivityOutcome = async (id, outcome, notes) => {
     action: "activity_outcome_updated",
     entityType: "Activity",
     entityId: id,
-    metadata: { outcome }
+    metadata: { outcome },
   });
 
   return updated;
 };
 
-
-
 export const getHospitalLatestActivities = async (user, limit = 4) => {
   let patientIds = [];
 
   switch (user.role) {
-
     case "hospital":
       const hospitalPatients = await Patient.find({
-        hospitalId: user._id || user.hospitalId
+        hospitalId: user._id || user.hospitalId,
       })
         .select("_id")
         .lean();
@@ -163,7 +251,7 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
 
     case "nurse":
       const nursePatients = await Patient.find({
-        nurseIds: { $in: [user._id] }
+        nurseIds: { $in: [user._id] },
       })
         .select("_id")
         .lean();
@@ -174,8 +262,8 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
       const caregiverPatients = await Patient.find({
         $or: [
           { primaryCaregiverId: user._id },
-          { secondaryCaregiverIds: { $in: [user._id] } }
-        ]
+          { secondaryCaregiverIds: { $in: [user._id] } },
+        ],
       })
         .select("_id")
         .lean();
@@ -184,7 +272,7 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
 
     case "patient":
       const patientUser = await Patient.findOne({
-        patientUserId: user._id
+        patientUserId: user._id,
       })
         .select("_id")
         .lean();
@@ -198,12 +286,12 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
   if (patientIds.length === 0) {
     return {
       activities: [],
-      count: 0
+      count: 0,
     };
   }
 
   const activities = await Activity.find({
-    patientId: { $in: patientIds }
+    patientId: { $in: patientIds },
   })
     .sort({ createdAt: -1 })
     .limit(limit)
@@ -213,8 +301,8 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
       select: "patientUserId",
       populate: {
         path: "patientUserId",
-        select: "firstName lastName"
-      }
+        select: "firstName lastName",
+      },
     })
     .lean();
 
@@ -225,13 +313,13 @@ export const getHospitalLatestActivities = async (user, limit = 4) => {
       userRole: user.role,
       userId: user._id,
       limit,
-      count: activities.length
-    }
+      count: activities.length,
+    },
   });
 
   return {
     activities,
-    count: activities.length
+    count: activities.length,
   };
 };
 

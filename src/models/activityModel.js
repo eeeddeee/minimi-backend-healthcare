@@ -4,52 +4,61 @@ const activitySchema = new mongoose.Schema({
   patientId: {
     type: mongoose.Schema.Types.ObjectId,
     ref: "Patient",
-    required: true
+    required: true,
   },
   caregiverId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
+    ref: "User",
   },
   nurseId: {
     type: mongoose.Schema.Types.ObjectId,
-    ref: "User"
+    ref: "User",
   },
   name: {
     type: String,
-    required: true
+    required: true,
   },
   description: String,
   schedule: {
     start: {
       type: Date,
-      required: true
+      required: true,
     },
     end: Date,
     recurrence: {
       type: String,
       enum: ["none", "daily", "weekly", "bi-weekly", "monthly"],
-      default: "none"
-    }
+      default: "none",
+    },
   },
   status: {
     type: String,
     enum: ["scheduled", "in-progress", "completed", "cancelled"],
-    default: "scheduled"
+    default: "scheduled",
   },
   notes: String,
   outcome: {
     type: String,
-    enum: ["excellent", "good", "fair", "poor"]
+    enum: ["excellent", "good", "fair", "poor"],
+  },
+  isNotified: {
+    type: Boolean,
+    default: false,
+    index: true,
+  },
+  notifiedAt: {
+    type: Date,
+    default: null,
   },
   createdAt: {
     type: Date,
     default: Date.now,
-    immutable: true
+    immutable: true,
   },
   updatedAt: {
     type: Date,
-    default: Date.now
-  }
+    default: Date.now,
+  },
 });
 
 // Indexes for activities

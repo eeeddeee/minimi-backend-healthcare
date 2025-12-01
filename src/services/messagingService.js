@@ -315,6 +315,7 @@ export const postMessage = async ({
       priority: "normal",
       emitEvent: "notification:new",
       emitCount: true,
+      deeplink: "MessageScreen",
     });
   } catch (notifyErr) {
     console.error("Message notification (REST) failed:", notifyErr);
