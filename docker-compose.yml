@@ -8,12 +8,5 @@ services:
     env_file:
       - .env
     environment:
-      - NODE_ENV=production
-    command: ["pm2-runtime", "start", "src/server.js"]
-    networks:
-      - minimi_backend_app_network
+      - NODE_ENV=Development
     restart: unless-stopped
-
-networks:
-  minimi_backend_app_network:
-    driver: bridge
