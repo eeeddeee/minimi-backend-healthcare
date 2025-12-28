@@ -5,8 +5,6 @@ services:
     image: mini-heath-care:dev
     ports:
       - "5000:5000"
-    env_file:
-      - .env
     environment:
       - NODE_ENV=Development
     restart: unless-stopped

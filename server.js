@@ -89,7 +89,7 @@ app.get("/", (req, res) => {
 });
 // createSuperAdmin()
 scheduleExpirySweep();
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 5000;
 const LOCAL_HOST = process.env.LOCAL_HOST;
 
 initializeFCM();
