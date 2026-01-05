@@ -20,6 +20,7 @@ import paymentRoute from "./paymentRoutes.js";
 import notificationRoute from "./notificationRoute.js";
 import dashboardRoute from "./dashboardRoutes.js";
 import fcmRoutes from "./fcmRoutes.js";
+import chatbotRoutes from './chatbotRoutes.js';
 
 // import systemLogRoute from "./systemLogRoute.js";
 // import adminStatsRoute from "./adminStatsRoute.js";
@@ -51,6 +52,9 @@ const defaultIRoute = [
   { path: "/notifications", route: notificationRoute },
   { path: "/dashboard", route: dashboardRoute },
   { path: "/fcm", route: fcmRoutes },
+  { path: "/chatbot", route: chatbotRoutes },
+
+
 ];
 
 defaultIRoute.forEach((route) => {
