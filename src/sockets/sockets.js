@@ -34,9 +34,12 @@ export const initSocket = (httpServer) => {
     ? process.env.SOCKET_CORS_ORIGINS.split(",").map((s) => s.trim())
     : [
         "*",
+        "https://mnimi.ai",
         "https://minimi-healthcare.onrender.com",
         "http://localhost:5173",
         "http://localhost:8081",
+        "http://localhost:5173",
+        "http://localhost:3000",
         "https://minimi-frontend-healthcare.vercel.app",
       ];
 
