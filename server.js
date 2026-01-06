@@ -56,6 +56,7 @@ const allowedOrigins = [
   "http://localhost:5173",
   "http://localhost:8081",
   "https://minimi-healthcare.onrender.com",
+  "https://mnimi.ai",
   "https://mnimi-healthcare.onrender.com",
   "https://minimi-healthcare.onrender.com/login",
   "https://mnimi-healthcare.onrender.com/login",
@@ -91,7 +92,7 @@ app.get("/", (req, res) => {
 });
 // createSuperAdmin()
 scheduleExpirySweep();
-const PORT = Number(process.env.PORT) || 8080;
+const PORT = Number(process.env.PORT) || 5000;
 const LOCAL_HOST = process.env.LOCAL_HOST;
 
 initializeFCM();
