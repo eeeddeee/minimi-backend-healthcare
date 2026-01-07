@@ -18,6 +18,7 @@ import {
   scheduleActivityNotifications,
   runInitialActivityCheck,
 } from "./src/cron-jobs/activityScheduler.js";
+import { startMedicationCron } from "./src/cron-jobs/medicationCron.js";
 
 import http from "http";
 
@@ -107,20 +108,9 @@ scheduleActivityNotifications();
 // ✅ NEW: Run initial check on server start
 runInitialActivityCheck();
 
+// ✅ Start medication reminder cron
+startMedicationCron();
+
 server.listen(PORT, () => {
   console.log(`Server running at http://localhost:${PORT}`);
 });
-// const server = http.createServer(app);
-// initSocket(server);
-
-// server.listen(PORT, LOCAL_HOST, () => {
-//   console.log(`Server running at http://localhost:${PORT}`);
-// });
-
-// app.listen(PORT, '0.0.0.0', () => {
-//   console.log(`Server listening on http://0.0.0.0:${PORT}`);
-// });
-
-// app.listen(PORT, LOCAL_HOST, () => {
-//   console.log(`Server running at http://${LOCAL_HOST}:${PORT}`);
-// });
