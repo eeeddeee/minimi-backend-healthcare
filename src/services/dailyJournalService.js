@@ -55,7 +55,9 @@ export const getJournals = async (filters = {}, page = 1, limit = 10) => {
     if (filters.from) query.date.$gte = new Date(filters.from);
     if (filters.to) query.date.$lte = new Date(filters.to);
   }
-  if (filters.mood) query.mood = filters.mood;
+  if (filters.mood) {
+    query.mood = { $regex: new RegExp(`^${filters.mood}$`, "i") };
+  }
 
   const [items, total] = await Promise.all([
     DailyJournal.find(query)
