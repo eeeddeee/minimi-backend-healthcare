@@ -1,6 +1,7 @@
 import { StatusCodes } from "http-status-codes";
 import DailyJournal from "../models/dailyJournalModel.js";
 import SystemLog from "../models/systemLogModel.js";
+import { notifyDailyJournalCreated } from "../utils/notify.js";
 
 // CREATE
 export const createJournal = async (data, authorId) => {
@@ -10,9 +11,9 @@ export const createJournal = async (data, authorId) => {
       authorId,
       notes: (data.notes || []).map((n) => ({
         text: n.text,
-        addedBy: authorId
-      }))
-    }
+        addedBy: authorId,
+      })),
+    },
   ]);
   const saved = doc[0].toObject();
 
@@ -21,8 +22,25 @@ export const createJournal = async (data, authorId) => {
     entityType: "DailyJournal",
     entityId: saved._id,
     performedBy: authorId,
-    metadata: { patientId: saved.patientId, date: saved.date }
+    metadata: { patientId: saved.patientId, date: saved.date },
   });
+
+  // SEND NOTIFICATIONS TO ALL RELEVANT USERS
+  try {
+    await notifyDailyJournalCreated({
+      journalId: saved._id,
+      patientId: saved.patientId,
+      date: saved.date,
+      mood: saved.mood,
+      createdByUserId: authorId,
+      sendFCM: true,
+    });
+  } catch (error) {
+    console.error(
+      "❌ Error sending daily journal creation notifications:",
+      error
+    );
+  }
 
   return saved;
 };
@@ -47,18 +65,18 @@ export const getJournals = async (filters = {}, page = 1, limit = 10) => {
       .select("-__v")
       .populate({ path: "authorId", select: "firstName lastName role email" })
       .lean(),
-    DailyJournal.countDocuments(query)
+    DailyJournal.countDocuments(query),
   ]);
 
   await SystemLog.create({
     action: "daily_journals_viewed",
     entityType: "DailyJournal",
-    metadata: { filters, page, limit, count: items.length }
+    metadata: { filters, page, limit, count: items.length },
   });
 
   return {
     journals: items,
-    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) }
+    pagination: { total, page, limit, totalPages: Math.ceil(total / limit) },
   };
 };
 
@@ -72,14 +90,14 @@ export const getJournalById = async (id) => {
   if (!journal || journal.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal not found"
+      message: "Daily journal not found",
     };
   }
 
   await SystemLog.create({
     action: "daily_journal_viewed",
     entityType: "DailyJournal",
-    entityId: id
+    entityId: id,
   });
 
   return { journal };
@@ -93,7 +111,7 @@ export const updateJournal = async (id, updates = {}, performedBy) => {
     set.notes = updates.notes.map((n) => ({
       text: n.text,
       addedBy: performedBy,
-      addedAt: new Date()
+      addedAt: new Date(),
     }));
   }
 
@@ -108,7 +126,7 @@ export const updateJournal = async (id, updates = {}, performedBy) => {
   if (!updated || updated.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal not found"
+      message: "Daily journal not found",
     };
   }
 
@@ -117,7 +135,7 @@ export const updateJournal = async (id, updates = {}, performedBy) => {
     entityType: "DailyJournal",
     entityId: id,
     performedBy,
-    metadata: { fields: Object.keys(updates) }
+    metadata: { fields: Object.keys(updates) },
   });
 
   return updated;
@@ -136,7 +154,7 @@ export const softDeleteJournal = async (id, performedBy) => {
   if (!updated) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal not found"
+      message: "Daily journal not found",
     };
   }
 
@@ -144,7 +162,7 @@ export const softDeleteJournal = async (id, performedBy) => {
     action: "daily_journal_deleted",
     entityType: "DailyJournal",
     entityId: id,
-    performedBy
+    performedBy,
   });
 
   return updated;
@@ -164,7 +182,7 @@ export const addActivityToJournal = async (id, activity, performedBy) => {
   if (!updated || updated.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal not found"
+      message: "Daily journal not found",
     };
   }
 
@@ -173,7 +191,7 @@ export const addActivityToJournal = async (id, activity, performedBy) => {
     entityType: "DailyJournal",
     entityId: id,
     performedBy,
-    metadata: { name: activity.name }
+    metadata: { name: activity.name },
   });
 
   return updated;
@@ -199,7 +217,7 @@ export const updateActivityInJournal = async (
   if (!updated || updated.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal or activity not found"
+      message: "Daily journal or activity not found",
     };
   }
 
@@ -208,7 +226,7 @@ export const updateActivityInJournal = async (
     entityType: "DailyJournal",
     entityId: id,
     performedBy,
-    metadata: { activityId }
+    metadata: { activityId },
   });
 
   return updated;
@@ -228,7 +246,7 @@ export const addNoteToJournal = async (id, text, performedBy) => {
   if (!updated || updated.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal not found"
+      message: "Daily journal not found",
     };
   }
 
@@ -236,7 +254,7 @@ export const addNoteToJournal = async (id, text, performedBy) => {
     action: "daily_journal_note_added",
     entityType: "DailyJournal",
     entityId: id,
-    performedBy
+    performedBy,
   });
 
   return updated;
@@ -254,7 +272,7 @@ export const updateNoteInJournal = async (id, noteId, text, performedBy) => {
   if (!updated || updated.isDeleted) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Daily journal or note not found"
+      message: "Daily journal or note not found",
     };
   }
 
@@ -263,7 +281,7 @@ export const updateNoteInJournal = async (id, noteId, text, performedBy) => {
     entityType: "DailyJournal",
     entityId: id,
     performedBy,
-    metadata: { noteId }
+    metadata: { noteId },
   });
 
   return updated;

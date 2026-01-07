@@ -11,13 +11,12 @@ export const ensureParticipantAccess = async (user, conversationId) => {
   if (!convo) {
     throw {
       statusCode: StatusCodes.NOT_FOUND,
-      message: "Conversation not found"
+      message: "Conversation not found",
     };
   }
 
   return convo;
 };
-
 
 // import Conversation from "../models/conversationModel.js";
 // import { StatusCodes } from "http-status-codes";
