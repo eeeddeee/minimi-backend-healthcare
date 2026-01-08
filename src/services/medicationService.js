@@ -316,14 +316,26 @@ export const updateReminderLog = async (logId, updates = {}) => {
   return log;
 };
 
-export const getNurseLatestReminders = async (nurse, limit = 4) => {
-  const nursePatients = await Patient.find({
-    nurseIds: { $in: [nurse._id] },
-  })
-    .select("_id")
-    .lean();
+export const getNurseLatestReminders = async (user, limit = 4) => {
+  let patientIds = [];
 
-  const patientIds = nursePatients.map((p) => p._id);
+  if (user.role === "nurse") {
+    const nursePatients = await Patient.find({
+      nurseIds: { $in: [user._id] },
+    })
+      .select("_id")
+      .lean();
+
+    patientIds = nursePatients.map((p) => p._id);
+  } else if (user.role === "hospital") {
+    const hospitalPatients = await Patient.find({
+      hospitalId: user._id,
+    })
+      .select("_id")
+      .lean();
+
+    patientIds = hospitalPatients.map((p) => p._id);
+  }
 
   if (patientIds.length === 0) {
     return {
@@ -341,7 +353,7 @@ export const getNurseLatestReminders = async (nurse, limit = 4) => {
     .populate({ path: "createdBy", select: "firstName lastName email" })
     .populate({
       path: "patientId",
-      select: "patientUserId",
+      select: "patientUserId hospitalId",
       populate: {
         path: "patientUserId",
         select: "firstName lastName",
@@ -350,10 +362,11 @@ export const getNurseLatestReminders = async (nurse, limit = 4) => {
     .lean();
 
   await SystemLog.create({
-    action: "nurse_latest_medication_reminders_viewed",
+    action: `${user.role}_latest_medication_reminders_viewed`,
     entityType: "MedicationReminder",
     metadata: {
-      nurseId: nurse._id,
+      userId: user._id,
+      userRole: user.role,
       limit,
       count: reminders.length,
       patientCount: patientIds.length,
@@ -365,6 +378,55 @@ export const getNurseLatestReminders = async (nurse, limit = 4) => {
     count: reminders.length,
   };
 };
+// export const getNurseLatestReminders = async (nurse, limit = 4) => {
+//   const nursePatients = await Patient.find({
+//     nurseIds: { $in: [nurse._id] },
+//   })
+//     .select("_id")
+//     .lean();
+
+//   const patientIds = nursePatients.map((p) => p._id);
+
+//   if (patientIds.length === 0) {
+//     return {
+//       reminders: [],
+//       count: 0,
+//     };
+//   }
+
+//   const reminders = await MedicationReminder.find({
+//     patientId: { $in: patientIds },
+//   })
+//     .sort({ createdAt: -1 })
+//     .limit(limit)
+//     .select("-__v")
+//     .populate({ path: "createdBy", select: "firstName lastName email" })
+//     .populate({
+//       path: "patientId",
+//       select: "patientUserId",
+//       populate: {
+//         path: "patientUserId",
+//         select: "firstName lastName",
+//       },
+//     })
+//     .lean();
+
+//   await SystemLog.create({
+//     action: "nurse_latest_medication_reminders_viewed",
+//     entityType: "MedicationReminder",
+//     metadata: {
+//       nurseId: nurse._id,
+//       limit,
+//       count: reminders.length,
+//       patientCount: patientIds.length,
+//     },
+//   });
+
+//   return {
+//     reminders,
+//     count: reminders.length,
+//   };
+// };
 
 /**
  * Get medication reminders that need notifications

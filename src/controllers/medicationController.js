@@ -6,7 +6,7 @@ import MedicationReminder from "../models/medicationReminderModel.js";
 const errorResponse = (res, error, fallback = "Something went wrong") =>
   res.status(error.statusCode || StatusCodes.INTERNAL_SERVER_ERROR).json({
     success: false,
-    message: error.message || fallback
+    message: error.message || fallback,
   });
 
 // POST /medications/reminders
@@ -27,7 +27,7 @@ export const createReminder = async (req, res) => {
         specificTimes: body.specificTimes || [],
         startDate: body.startDate,
         endDate: body.endDate,
-        status: body.status || "active"
+        status: body.status || "active",
       },
       req.user._id
     );
@@ -156,7 +156,7 @@ export const getReminderLogs = async (req, res) => {
       from,
       to,
       page: parseInt(page),
-      limit: parseInt(limit)
+      limit: parseInt(limit),
     });
 
     return res.success(
@@ -183,7 +183,7 @@ export const updateReminderLog = async (req, res) => {
     if (!parent) {
       return errorResponse(res, {
         statusCode: StatusCodes.NOT_FOUND,
-        message: "Medication log not found"
+        message: "Medication log not found",
       });
     }
 
@@ -205,9 +205,9 @@ export const updateReminderLog = async (req, res) => {
 
 export const getNurseLatestReminders = async (req, res) => {
   try {
-    if (req.user.role !== "nurse") {
+    if (req.user.role !== "nurse" && req.user.role !== "hospital") {
       return res.error(
-        "Access denied. Only nurses can access this resource.",
+        "Access denied. Only nurses and hospitals can access this resource.",
         null,
         StatusCodes.FORBIDDEN
       );
